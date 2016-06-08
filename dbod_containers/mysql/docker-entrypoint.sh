@@ -136,6 +136,7 @@ EOSQL
         chown -R mysql:mysql "$GENLOGDIR"
         chown -R mysql:mysql "$SLOWLOGDIR"
         chown -R mysql:mysql "$BINLOGDIR"
+
 fi
 
 exec "$@"
