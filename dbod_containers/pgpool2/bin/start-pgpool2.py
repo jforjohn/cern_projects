@@ -5,6 +5,7 @@ from subprocess import check_call
 
 import hashlib
 import os
+import signal
 
 def pgpool_get_configuration():
         configuration = { }
@@ -34,6 +35,14 @@ def pgpool_get_configuration():
 def run(app, *args):
         check_call([app] + list(args))
 
+def exit_gracefully(signum, frame):
+    if (signum == 15):
+        print '\nExiting forcefully with signal:%s...\n' %(signum)
+        run('gosu','pgpool','pgpool','-m','fast','stop')
+    else:
+        print '\nExiting gracefully with signal:%s...\n' %(signum)
+        run('gosu','pgpool','pgpool','stop')
+
 def write(template, path):
         with open(path, "wb") as output:
                 output.write(template)
@@ -48,10 +57,14 @@ if __name__ == "__main__":
         pcp = templates.get_template('pcp.conf.template').render(configuration)
         write(pcp, '/usr/local/etc/pcp.conf')
         pgpool = templates.get_template('pgpool.conf.template').render(configuration)
-        print 'pgpool.conf.template'
         write(pgpool, '/usr/local/etc/pgpool.conf')
+
         # Start the container.
+        signal.signal(signal.SIGINT, exit_gracefully)
+        signal.signal(signal.SIGTERM, exit_gracefully)
+        #signal.signal(signal.SIGKILL, exit_gracefully)
+        
         try:
-                run('pgpool',  'pgpool', '-dn')
-        except KeyboardInterrupt:
-                print 'Exiting...'
+            run('gosu', 'pgpool', 'pgpool', '-dn')
+        except:
+            print "signal trap"
