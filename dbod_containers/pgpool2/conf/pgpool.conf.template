@@ -24,27 +24,41 @@
 
 # - pgpool Connection Settings -
 
+#listen_addresses = 'localhost'
 listen_addresses = '*'
                                    # Host name or IP address to listen on:
                                    # '*' for all, '' for no TCP/IP connections
                                    # (change requires restart)
+#port = 9999
 port = {{ pgpool_port }}
                                    # Port number
                                    # (change requires restart)
-socket_dir = '/var/run/postgresql'
+#socket_dir = '/tmp'
+socket_dir = '/var/run/pgpool'
                                    # Unix domain socket path
                                    # The Debian package defaults to
                                    # /var/run/postgresql
                                    # (change requires restart)
-
+listen_backlog_multiplier = 2
+                                   # Set the backlog parameter of listen(2) to
+								   # num_init_children * listen_backlog_multiplier.
+                                   # (change requires restart)
+serialize_accept = off
+                                   # whether to serialize accept() call to avoid thundering herd problem
+                                   # (change requires restart)
 
 # - pgpool Communication Manager Connection Settings -
-pcp_listen_addresses = '*'
 
+pcp_listen_addresses = '*'
+                                   # Host name or IP address for pcp process to listen on:
+                                   # '*' for all, '' for no TCP/IP connections
+                                   # (change requires restart)
+#pcp_port = 9898
 pcp_port = {{ pcp_port }}
                                    # Port number for pcp
                                    # (change requires restart)
-pcp_socket_dir = '/var/run/postgresql'
+#pcp_socket_dir = '/tmp'
+pcp_socket_dir = '/var/run/pgpool'
                                    # Unix domain socket path for pcp
                                    # The Debian package defaults to
                                    # /var/run/postgresql
@@ -52,13 +66,13 @@ pcp_socket_dir = '/var/run/postgresql'
 
 # - Backend Connection Settings -
 
-#backend_hostname0 = 'host1'
+#backend_hostname0 = 'localhost'
                                    # Host name or IP address to connect to for backend 0
 #backend_port0 = 5432
                                    # Port number for backend 0
 #backend_weight0 = 1
                                    # Weight for backend 0 (only in load balancing mode)
-#backend_data_directory0 = '/data'
+#backend_data_directory0 = '/var/lib/pgsql/data'
                                    # Data directory for backend 0
 #backend_flag0 = 'ALLOW_TO_FAILOVER'
                                    # Controls various backend behavior
@@ -68,6 +82,7 @@ pcp_socket_dir = '/var/run/postgresql'
 #backend_weight1 = 1
 #backend_data_directory1 = '/data1'
 #backend_flag1 = 'ALLOW_TO_FAILOVER'
+
 {% for backend in pgpool_backends %}
 {% set tokens = backend.split(':') %}
 backend_hostname{{ tokens[0] }} = '{{ tokens[1] }}'
@@ -78,9 +93,9 @@ backend_flag{{ tokens[0] }} = 'ALLOW_TO_FAILOVER'
 
 # - Authentication -
 
-enable_pool_hba = off
+enable_pool_hba = on
                                    # Use pool_hba.conf for client authentication
-pool_passwd = 'pool_passwd'
+pool_passwd = 'pool_md5'
                                    # File name of pool_passwd for md5 authentication.
                                    # "" disables pool_passwd.
                                    # (change requires restart)
@@ -150,9 +165,7 @@ log_destination = 'stderr'
 
 # - What to log -
 
-print_timestamp = on
-                                   # Print timestamp on each line
-                                   # (change requires restart)
+log_line_prefix = '%t: pid %p: '   # printf-style string to output at beginning of each log line.
 
 log_connections = on
                                    # Log connections
@@ -164,7 +177,8 @@ log_statement = off
 log_per_node_statement = off
                                    # Log all statements
                                    # with node and backend informations
-log_standby_delay = 'none'
+#log_standby_delay = 'none'
+log_standby_delay = 'if_over_threshold'
                                    # Log standby delay
                                    # Valid values are combinations of always,
                                    # if_over_threshold, none
@@ -183,15 +197,41 @@ debug_level = 0
                                    # Debug message verbosity level
                                    # 0 means no message, 1 or more mean verbose
 
+#log_error_verbosity = default          # terse, default, or verbose messages
+
+#client_min_messages = notice           # values in order of decreasing detail:
+                                        #   debug5
+                                        #   debug4
+                                        #   debug3
+                                        #   debug2
+                                        #   debug1
+                                        #   log
+                                        #   notice
+                                        #   warning
+                                        #   error
+
+#log_min_messages = warning             # values in order of decreasing detail:
+                                        #   debug5
+                                        #   debug4
+                                        #   debug3
+                                        #   debug2
+                                        #   debug1
+                                        #   info
+                                        #   notice
+                                        #   warning
+                                        #   error
+                                        #   log
+                                        #   fatal
+                                        #   panic
 
 #------------------------------------------------------------------------------
 # FILE LOCATIONS
 #------------------------------------------------------------------------------
 
-pid_file_name = '/var/run/postgresql/pgpool.pid'
+pid_file_name = '/var/run/pgpool/pgpool.pid'
                                    # PID file name
                                    # (change requires restart)
-logdir = '/var/log/postgresql'
+logdir = '/var/log/pgpool'
                                    # Directory of pgPool status file
                                    # (change requires restart)
 
@@ -216,16 +256,30 @@ reset_query_list = 'ABORT; DISCARD ALL'
 # REPLICATION MODE
 #------------------------------------------------------------------------------
 
-replication_mode = on
+replication_mode = off
                                    # Activate replication mode
                                    # (change requires restart)
 replicate_select = off
                                    # Replicate SELECT statements
-                                   # when in replication or parallel mode
+                                   # when in replication mode
                                    # replicate_select is higher priority than
                                    # load_balance_mode.
 
 insert_lock = off
+                                   # Automatically locks a dummy row or a table
+# REPLICATION MODE
+#------------------------------------------------------------------------------
+
+replication_mode = off
+                                   # Activate replication mode
+                                   # (change requires restart)
+replicate_select = off
+                                   # Replicate SELECT statements
+                                   # when in replication mode
+                                   # replicate_select is higher priority than
+                                   # load_balance_mode.
+
+insert_lock = on
                                    # Automatically locks a dummy row or a table
                                    # with INSERT statements to keep SERIAL data
                                    # consistency
@@ -265,20 +319,34 @@ white_function_list = ''
                                    # Comma separated list of function names
                                    # that don't write to database
                                    # Regexp are accepted
-black_function_list = 'nextval,setval'
+black_function_list = 'nextval,setval,nextval,setval'
                                    # Comma separated list of function names
                                    # that write to database
                                    # Regexp are accepted
 
+database_redirect_preference_list = ''
+								   # comma separated list of pairs of database and node id.
+								   # example: postgres:primary,mydb[0-4]:1,mydb[5-9]:2'
+								   # valid for streaming replicaton mode only.
+
+app_name_redirect_preference_list = ''
+								   # comma separated list of pairs of app name and node id.
+								   # example: 'psql:primary,myapp[0-4]:1,myapp[5-9]:standby'
+								   # valid for streaming replicaton mode only.
+allow_sql_comments = off
+								   # if on, ignore SQL comments when judging if load balance or
+								   # query cache is possible.
+								   # If off, SQL comments effectively prevent the judgment
+								   # (pre 3.4 behavior).
 
 #------------------------------------------------------------------------------
 # MASTER/SLAVE MODE
 #------------------------------------------------------------------------------
 
-master_slave_mode = off
+master_slave_mode = on
                                    # Activate master/slave mode
                                    # (change requires restart)
-master_slave_sub_mode = 'slony'
+master_slave_sub_mode = 'stream'
                                    # Master/slave sub mode
                                    # Valid values are combinations slony or
                                    # stream. Default is slony.
@@ -289,13 +357,15 @@ master_slave_sub_mode = 'slony'
 sr_check_period = 0
                                    # Streaming replication check period
                                    # Disabled (0) by default
-sr_check_user = 'nobody'
+sr_check_user = 'admin'
                                    # Streaming replication check user
                                    # This is necessary even if you disable
                                    # streaming replication delay check with
                                    # sr_check_period = 0
-sr_check_password = ''
+sr_check_password = 'dbod-postgres-test'
                                    # Password for streaming replication check user
+#sr_check_database = 'replication'
+                                   # Database name for streaming replication check
 delay_threshold = 0
                                    # Threshold before not dispatching query to standby node
                                    # Unit is in bytes
@@ -318,34 +388,6 @@ follow_master_command = ''
                                    #   %R = new master database cluster path
                                    #   %% = '%' character
 
-
-#------------------------------------------------------------------------------
-# PARALLEL MODE
-#------------------------------------------------------------------------------
-
-parallel_mode = off
-                                   # Activates parallel query mode
-                                   # (change requires restart)
-pgpool2_hostname = ''
-                                   # Set pgpool2 hostname
-                                   # (change requires restart)
-
-# - System DB info -
-
-system_db_hostname  = 'localhost'
-                                   # (change requires restart)
-system_db_port = 5432
-                                   # (change requires restart)
-system_db_dbname = 'pgpool'
-                                   # (change requires restart)
-system_db_schema = 'pgpool_catalog'
-                                   # (change requires restart)
-system_db_user = 'pgpool'
-                                   # (change requires restart)
-system_db_password = ''
-                                   # (change requires restart)
-
-
 #------------------------------------------------------------------------------
 # HEALTH CHECK
 #------------------------------------------------------------------------------
@@ -356,21 +398,29 @@ health_check_period = 0
 health_check_timeout = 20
                                    # Health check timeout
                                    # 0 means no timeout
-health_check_user = 'nobody'
+health_check_user = 'admin'
                                    # Health check user
-health_check_password = ''
+health_check_password = 'dbod-postgres-test'
                                    # Password for health check user
+health_check_database = 'admin'
+                                   # Database name for health check. If '', tries 'postgres' frist, then 'template1'
+
 health_check_max_retries = 0
                                    # Maximum number of times to retry a failed health check before giving up.
 health_check_retry_delay = 1
                                    # Amount of time to wait (in seconds) between retries.
-
+connect_timeout = 10000
+                                   # Timeout value in milliseconds before giving up to connect to backend.
+								   # Default is 10000 ms (10 second). Flaky network user may want to increase
+								   # the value. 0 means no timeout.
+								   # Note that this value is not only used for health check,
+								   # but also for ordinary conection to backend.
 
 #------------------------------------------------------------------------------
 # FAILOVER AND FAILBACK
 #------------------------------------------------------------------------------
 
-failover_command = ''
+failover_command = '/usr/bin/failover %d %H failover %R'
                                    # Executes this command at failover
                                    # Special values:
                                    #   %d = node id
@@ -415,9 +465,9 @@ search_primary_node_timeout = 10
 # ONLINE RECOVERY
 #------------------------------------------------------------------------------
 
-recovery_user = 'nobody'
+recovery_user = 'admin'
                                    # Online recovery user
-recovery_password = ''
+recovery_password = 'dbod-postgres-test'
                                    # Online recovery password
 recovery_1st_stage_command = ''
                                    # Executes a command in first stage
@@ -464,29 +514,39 @@ wd_hostname = ''
 wd_port = 9000
                                     # port number for watchdog service
                                     # (change requires restart)
+wd_priority = 1
+									# priority of this watchdog in leader election
+									# (change requires restart)
+
 wd_authkey = ''
                                     # Authentication key for watchdog communication
                                     # (change requires restart)
+
+wd_ipc_socket_dir = '/tmp'
+									# Unix domain socket path for watchdog IPC socket
+									# The Debian package defaults to
+									# /var/run/postgresql
+									# (change requires restart)
+
 
 # - Virtual IP control Setting -
 
 delegate_IP = ''
                                     # delegate IP address
-                                    # If this is empty, virtual IP never bring up. 
+                                    # If this is empty, virtual IP never bring up.
                                     # (change requires restart)
-ifconfig_path = '/sbin'
-                                    # ifconfig command path
+if_cmd_path = '/sbin'
+                                    # path to the directory where if_up/down_cmd exists 
                                     # (change requires restart)
-if_up_cmd = 'ifconfig eth0:0 inet $_IP_$ netmask 255.255.255.0'
+if_up_cmd = 'ip addr add $_IP_$/24 dev eth0 label eth0:0'
                                     # startup delegate IP command
                                     # (change requires restart)
-if_down_cmd = 'ifconfig eth0:0 down'
+if_down_cmd = 'ip addr del $_IP_$/24 dev eth0'
                                     # shutdown delegate IP command
                                     # (change requires restart)
-
-arping_path = '/usr/sbin'           # arping command path
+arping_path = '/usr/sbin'
+                                    # arping command path
                                     # (change requires restart)
-
 arping_cmd = 'arping -U $_IP_$ -w 1'
                                     # arping command
                                     # (change requires restart)
@@ -503,13 +563,23 @@ clear_memqcache_on_escalation = on
 wd_escalation_command = ''
                                     # Executes this command at escalation on new active pgpool.
                                     # (change requires restart)
+wd_de_escalation_command = ''
+									# Executes this command when master pgpool resigns from being master.
+									# (change requires restart)
 
-# - Lifecheck Setting - 
+# - Lifecheck Setting -
 
 # -- common --
 
+wd_monitoring_interfaces_list = ''  # Comma separated list of interfaces names to monitor.
+									# if any interface from the list is active the watchdog will
+									# consider the network is fine
+									# 'any' to enable monitoring on all interfaces except loopback
+									# '' to disable monitoring
+
+
 wd_lifecheck_method = 'heartbeat'
-                                    # Method of watchdog lifecheck ('heartbeat' or 'query')
+                                    # Method of watchdog lifecheck ('heartbeat' or 'query' or 'external')
                                     # (change requires restart)
 wd_interval = 10
                                     # lifecheck interval (sec) > 0
@@ -614,9 +684,16 @@ check_temp_table = on
                                    # and you want to save access to primary/master, you could turn this off.
                                    # Default is on.
 
+check_unlogged_table = on
+                                   # If on, enable unlogged table check in SELECT statements.
+                                   # This initiates queries against system catalog of primary/master
+                                   # thus increases load of master.
+                                   # If you are absolutely sure that your system never uses unlogged tables
+                                   # and you want to save access to primary/master, you could turn this off.
+                                   # Default is on.
 
 #------------------------------------------------------------------------------
-# ON MEMORY QUERY MEMORY CACHE
+# IN MEMORY QUERY MEMORY CACHE
 #------------------------------------------------------------------------------
 memory_cache_enabled = off
 								   # If on, use the memory cache functionality, off by default
@@ -637,20 +714,6 @@ memqcache_total_size = 67108864
 								   # Total memory size in bytes for storing memory cache.
 								   # Mandatory if memqcache_method = 'shmem'.
 								   # Defaults to 64MB.
-                                   # (change requires restart)
-memqcache_max_num_cache = 1000000
-								   # Total number of cache entries. Mandatory
-								   # if memqcache_method = 'shmem'.
-								   # Each cache entry consumes 48 bytes on shared memory.
-								   # Defaults to 1,000,000(45.8MB).
-                                   # (change requires restart)
-memqcache_expire = 0
-								   # Memory cache entry life time specified in seconds.
-								   # 0 means infinite life time. 0 by default.
-                                   # (change requires restart)
-memqcache_auto_cache_invalidation = on
-								   # If on, invalidation of query cache is triggered by corresponding
-								   # DDL/DML/DCL(and memqcache_expire).  If off, it is only triggered
 								   # by memqcache_expire.  on by default.
                                    # (change requires restart)
 memqcache_maxcache = 409600

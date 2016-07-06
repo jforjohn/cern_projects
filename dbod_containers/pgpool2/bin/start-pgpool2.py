@@ -16,10 +16,17 @@ def pgpool_get_configuration():
         value = os.getenv('PCP_USER', 'postgres')
         configuration.update({ 'pcp_user': value })
         # Get the PCP user password.
-        value = os.getenv('PCP_USER_PASSWORD', 'bettervoice')
-        hash = hashlib.md5()
-        hash.update(value)
-        configuration.update({ 'pcp_user_password': hash.hexdigest() })
+        value = os.getenv('PCP_USER_PASSWORD', 'mypass')
+        hashpass = hashlib.md5(value)
+        configuration.update({ 'pcp_user_password': hashpass.hexdigest() })
+        # Get the pgpool user which corresponds to the one in Postgres
+        value = os.getenv('POOL_USER','admin')
+        configuration.update({ 'pool_user': value })
+        pool_user = value
+        # Get the pgpool user password which corresponds to the one in Postgres
+        value = os.getenv('POOL_USER_PASSWORD','dbod-postgres-test')
+        hashpass = hashlib.md5(value + pool_user)
+        configuration.update({ 'pool_user_password': 'md5' + hashpass.hexdigest() })
         # Get the port pgpool should listen on.
         value = os.getenv('PGPOOL_PORT', 5432)
         configuration.update({ 'pgpool_port': value })
@@ -36,12 +43,12 @@ def run(app, *args):
         check_call([app] + list(args))
 
 def exit_gracefully(signum, frame):
-    if (signum == 15):
-        print '\nExiting forcefully with signal:%s...\n' %(signum)
-        run('gosu','pgpool','pgpool','-m','fast','stop')
-    else:
-        print '\nExiting gracefully with signal:%s...\n' %(signum)
-        run('gosu','pgpool','pgpool','stop')
+    #if (signum == 15):
+    print '\nExiting forcefully with signal:%s...\n' %(signum)
+    run('gosu','pgpool','pgpool','-m','fast','stop')
+    #else:
+    #    print '\nExiting gracefully with signal:%s...\n' %(signum)
+    #    run('gosu','pgpool','pgpool','stop')
 
 def write(template, path):
         with open(path, "wb") as output:
@@ -56,8 +63,12 @@ if __name__ == "__main__":
         # Write PCP user credentials.
         pcp = templates.get_template('pcp.conf.template').render(configuration)
         write(pcp, '/usr/local/etc/pcp.conf')
-        pgpool = templates.get_template('pgpool.conf.template').render(configuration)
-        write(pgpool, '/usr/local/etc/pgpool.conf')
+        pgpoolConf = templates.get_template('pgpool.conf.template').render(configuration)
+        write(pgpoolConf, '/usr/local/etc/pgpool.conf')
+        pool = templates.get_template('pool_md5.template').render(configuration)
+        write(pool, '/usr/local/etc/pool_md5')
+        pgpool_hba = templates.get_template('pool_hba.conf.template').render(configuration)
+        write(pgpool_hba, '/usr/local/etc/pool_hba.conf')
 
         # Start the container.
         signal.signal(signal.SIGINT, exit_gracefully)
