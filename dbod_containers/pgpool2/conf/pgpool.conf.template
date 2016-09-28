@@ -86,6 +86,10 @@ pcp_socket_dir = '/var/run/pgpool'
 {% for backend in pgpool_backends %}
 {% set tokens = backend.split(':') %}
 backend_hostname{{ tokens[0] }} = '{{ tokens[1] }}'
+{# set pgdata = '/ORA/dbs03/' + tokens[1].split('-')[1].split('.')[0].upper() + '/data' #}
+{% if tokens|length == 4 %}
+    backend_data_directory{{ tokens[0] }} = '{{ tokens[3] }}'
+{% endif %}
 backend_port{{ tokens[0] }} = {{ tokens[2] }}
 backend_weight{{ tokens[0] }} = 1
 backend_flag{{ tokens[0] }} = 'ALLOW_TO_FAILOVER'
@@ -93,7 +97,7 @@ backend_flag{{ tokens[0] }} = 'ALLOW_TO_FAILOVER'
 
 # - Authentication -
 
-enable_pool_hba = on
+enable_pool_hba = true
                                    # Use pool_hba.conf for client authentication
 pool_passwd = 'pool_md5'
                                    # File name of pool_passwd for md5 authentication.
@@ -105,16 +109,16 @@ authentication_timeout = 60
 
 # - SSL Connections -
 
-ssl = off
+ssl = true
                                    # Enable SSL support
                                    # (change requires restart)
-#ssl_key = './server.key'
+ssl_key = '/etc/ssl/key.pem'
                                    # Path to the SSL private key file
                                    # (change requires restart)
-#ssl_cert = './server.cert'
+ssl_cert = '/etc/ssl/mycert.pem'
                                    # Path to the SSL public certificate file
                                    # (change requires restart)
-#ssl_ca_cert = ''
+ssl_ca_cert = '/etc/ssl/ca.pem'
                                    # Path to a single PEM format file
                                    # containing CA root certificate(s)
                                    # (change requires restart)
@@ -129,7 +133,7 @@ ssl = off
 
 # - Pool size -
 
-num_init_children = 32
+num_init_children = 1
                                    # Number of pools
                                    # (change requires restart)
 max_pool = 4
@@ -167,14 +171,14 @@ log_destination = 'stderr'
 
 log_line_prefix = '%t: pid %p: '   # printf-style string to output at beginning of each log line.
 
-log_connections = on
+log_connections = off
                                    # Log connections
 log_hostname = on
                                    # Hostname will be shown in ps status
                                    # and in logs if connections are logged
 log_statement = off
                                    # Log all statements
-log_per_node_statement = off
+log_per_node_statement = on
                                    # Log all statements
                                    # with node and backend informations
 #log_standby_delay = 'none'
@@ -354,26 +358,26 @@ master_slave_sub_mode = 'stream'
 
 # - Streaming -
 
-sr_check_period = 0
+sr_check_period = 50
                                    # Streaming replication check period
                                    # Disabled (0) by default
-sr_check_user = 'admin'
+sr_check_user = '{{ sr_check_user }}'
                                    # Streaming replication check user
                                    # This is necessary even if you disable
                                    # streaming replication delay check with
                                    # sr_check_period = 0
-sr_check_password = 'dbod-postgres-test'
+sr_check_password = '{{ sr_check_password }}'
                                    # Password for streaming replication check user
-#sr_check_database = 'replication'
+sr_check_database = '{{ sr_check_database }}'
                                    # Database name for streaming replication check
-delay_threshold = 0
+delay_threshold = 420
                                    # Threshold before not dispatching query to standby node
                                    # Unit is in bytes
                                    # Disabled (0) by default
 
 # - Special commands -
 
-follow_master_command = ''
+follow_master_command = '/usr/bin/follow_master %d %h %p %D %m %H %r %R %M %P'
                                    # Executes this command after master failover
                                    # Special values:
                                    #   %d = node id
@@ -392,17 +396,17 @@ follow_master_command = ''
 # HEALTH CHECK
 #------------------------------------------------------------------------------
 
-health_check_period = 0
+health_check_period = 60
                                    # Health check period
                                    # Disabled (0) by default
 health_check_timeout = 20
                                    # Health check timeout
                                    # 0 means no timeout
-health_check_user = 'admin'
+health_check_user = '{{ health_check_user }}'
                                    # Health check user
-health_check_password = 'dbod-postgres-test'
+health_check_password = '{{ health_check_password }}'
                                    # Password for health check user
-health_check_database = 'admin'
+health_check_database = '{{ health_check_database }}'
                                    # Database name for health check. If '', tries 'postgres' frist, then 'template1'
 
 health_check_max_retries = 0
@@ -420,7 +424,7 @@ connect_timeout = 10000
 # FAILOVER AND FAILBACK
 #------------------------------------------------------------------------------
 
-failover_command = '/usr/bin/failover %d %H failover %R'
+failover_command = '/usr/bin/failover %d %h %p %D %m %H %r %R %M %P failover'
                                    # Executes this command at failover
                                    # Special values:
                                    #   %d = node id
@@ -465,11 +469,11 @@ search_primary_node_timeout = 10
 # ONLINE RECOVERY
 #------------------------------------------------------------------------------
 
-recovery_user = 'admin'
+recovery_user = '{{ recovery_user }}'
                                    # Online recovery user
-recovery_password = 'dbod-postgres-test'
+recovery_password = '{{ recovery_user_password }}'
                                    # Online recovery password
-recovery_1st_stage_command = ''
+recovery_1st_stage_command = 'recovery_1st_stage.sh'
                                    # Executes a command in first stage
 recovery_2nd_stage_command = ''
                                    # Executes a command in second stage
@@ -695,7 +699,7 @@ check_unlogged_table = on
 #------------------------------------------------------------------------------
 # IN MEMORY QUERY MEMORY CACHE
 #------------------------------------------------------------------------------
-memory_cache_enabled = off
+memory_cache_enabled = on
 								   # If on, use the memory cache functionality, off by default
 memqcache_method = 'shmem'
 								   # Cache storage method. either 'shmem'(shared memory) or
