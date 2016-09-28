@@ -67,3 +67,6 @@
 host    all         all         127.0.0.1/32          trust
 #host    all         all         ::1/128               trust
 host    all {{ pool_user }}   0.0.0.0/0   md5
+host    all         postgres    0.0.0.0/0   md5
+#host    all         postgres    0.0.0.0/0   md5
+hostssl  all {{ pool_user }}  0.0.0.0/0     cert clientcert=1
