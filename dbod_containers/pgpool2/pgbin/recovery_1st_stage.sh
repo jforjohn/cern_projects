@@ -9,7 +9,8 @@ HOST_TO_RECOVER_DB_CLUSTER=$3
 MASTER_PORT=$4
 HOST_TO_RECOVER_USER=dbod
 #HOST_TO_RECOVER_ARCHIVE=$HOST_TO_RECOVER_DB_CLUSTER/pg_xlog
-HOST_TO_RECOVER_ARCHIVE=/ORA/dbs02/$HOST_TO_RECOVER/pg_xlog
+ARCHIVE=${HOST_TO_RECOVER_DB_CLUSTER/dbs03/dbs02}
+HOST_TO_RECOVER_ARCHIVE=${ARCHIVE%\/data}
 MASTER_USER_REPL=pgrepl
 MASTER_HOST_REPL=127.0.0.1
 PG_VERSION_MAJOR=9.4
@@ -38,10 +39,11 @@ scp -r $MASTER_DB_CLUSTER/../$BACKUP_FILE $HOST_TO_RECOVER_USER@$HOST_TO_RECOVER
 
 echo "INFO - Uncompress : Modify Files : Place to PgDataDir" >>$LOG
 ssh -t $HOST_TO_RECOVER_USER@$HOST_TO_RECOVER "mv $BACKUP_FILE /tmp; \
-    sudo -iu postgres cp -rf $HOST_TO_RECOVER_DB_CLUSTER/data/* HOST_TO_RECOVER_DB_CLUSTER/data.old; \
+    sudo -iu postgres cp -rf $HOST_TO_RECOVER_DB_CLUSTER/data/* $HOST_TO_RECOVER_DB_CLUSTER/data.old; \
     sudo -iu postgres rm -rf $HOST_TO_RECOVER_DB_CLUSTER/data/*; \
     sudo -iu postgres tar xzfp /tmp/$BACKUP_FILE/base.tar.gz -C $HOST_TO_RECOVER_DB_CLUSTER/data; \
     sudo -iu postgres rm -rf /tmp/$BACKUP_FILE; \
+    sudo -iu postgres rm -rf $HOST_TO_RECOVER_ARCHIVE/pg_xlog; \
     sudo -iu postgres mv $HOST_TO_RECOVER_DB_CLUSTER/pg_xlog $HOST_TO_RECOVER_ARCHIVE/pg_xlog; \
     sudo -iu postgres ln -s $HOST_TO_RECOVER_ARCHIVE/pg_xlog $HOST_TO_RECOVER_DB_CLUSTER/pg_xlog" \
     >> $LOG
@@ -55,6 +57,6 @@ fi
 echo "INFO - Deleting backup which was sent to the recovered node" >> $LOG
 /bin/rm -rf $MASTER_DB_CLUSTER/../$BACKUP_FILE
 
-echo "INFO - Recovery finished" >> $LOG
+echo "INFO - Recovery of $HOST_TO_RECOVER finished" >> $LOG
 
 exit 0;
