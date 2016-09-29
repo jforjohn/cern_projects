@@ -1,0 +1,58 @@
+#!/bin/env bash
+
+ATTACHED_NODE=${1}          # %d
+ATTACHED_HOSTNAME=${2}      # %h
+ATTACHED_PORT=${3}          # %p
+ATTACHED_DB_CLUSTER=${4}    # %D
+NEW_MASTER=${5}           # %m
+NEW_MASTER_HOSTNAME=${6}  # %H
+NEW_MASTER_PORT=${7}      # %r
+NEW_MASTER_DB_CLUSTER=${8} # %R
+OLD_MASTER=${9}           # %M
+OLD_PRIMARY=${10}         # %P
+ARCHIVE=${ATTACHED_DB_CLUSTER/dbs03/dbs02}
+ATTACHED_ARCHIVE=${ARCHIVE%\/data}
+
+MODE=m2s
+
+#PG_CTL=/usr/pgsql-$PG_VERSION_MAJOR/bin/pg_ctl
+PG_CTL=/usr/local/pgsql/pgsql-$PG_VERSION/bin/pg_ctl
+PG_BASEBACKUP=/usr/local/pgsql/pgsql-$PG_VERSION_MAJOR/bin/pg_basebackup
+
+LOG=/var/log/pgpool/failover-recovery.log
+ATTACHED_USER=dbod
+NEW_MASTER_USER=dbod
+BACKUP_FILE=pgdata2.bak
+MASTER_USER_REPL=pgrepl
+
+
+echo -e "$(date) - $(basename $0)\n \
+    attached node: id $ATTACHED_NODE -> $ATTACHED_HOSTNAME:$ATTACHED_PORT @ $ATTACHED_DB_CLUSTER \n \
+    new master:  id $NEW_MASTER -> $NEW_MASTER_HOSTNAME:$NEW_MASTER_PORT @ $NEW_MASTER_DB_CLUSTER \n \
+    old master: id $OLD_MASTER \n \
+    old primary: id $OLD_PRIMARY \n" \
+    >> $LOG
+
+#pg_ctl = /usr/local/pgsql/pgsql-$PG_SERVER_VERSION/bin/pg_ctl
+
+if [ -f $HOME/environment.sh ]; ATTACHED_NODE
+    echo "INFO - Exporting environment variables \n" >> $LOG
+    source $HOME/environment.sh
+else
+    echo "WARNING - Environment variables not set \n" >> $LOG
+
+ssh -t $ATTACHED_USER@$ATTACHED_HOSTNAME "sudo -iu postgres $PG_BASEBACKUP -D $ATTACHED_DB_CLUSTER -F t -z -x -v -P -U $MASTER_USER_REPL -p $NEW_MASTER_PORT -h $NEW_MASTER_HOSTNAME
+    sudo -iu postgres cp -rf $ATTACHED_DB_CLUSTER/data/* $ATTACHED_DB_CLUSTER/data.old; \
+    sudo -iu postgres rm -rf $HOST_TO_RECOVER_DB_CLUSTER/data/*; \
+    sudo -iu postgres tar xzfp $BACKUP_FILE/base.tar.gz -C $ATTACHED_DB_CLUSTER/data; \
+    sudo -iu postgres rm -rf $BACKUP_FILE; \
+    sudo -iu postgres rm -rf $ATTACHED_ARCHIVE/pg_xlog; \
+    sudo -iu postgres mv $ATTACHED_DB_CLUSTER/pg_xlog $ATTACHED_ARCHIVE/pg_xlog; \
+    sudo -iu postgres ln -s $ATTACHED_ARCHIVE/pg_xlog $ATTACHED_DB_CLUSTER/pg_xlog; \
+    sudo -i -u postgres /bin/cp -f $ATTACHED_DB_CLUSTER/../repl_files/* $ATTACHED_DB_CLUSTER; \
+    sudo -iu postgres $PG_CTL -D $ATTACHED_DB_CLUSTER restart" \
+    >> $LOG
+
+echo "INFO - Attaching $ATTACHED_HOSTNAME finished"
+
+exit 0;
