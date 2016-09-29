@@ -108,17 +108,17 @@ RUN groupadd -r pgpool --gid=990 && useradd -r -g pgpool --uid=990 pgpool \
     gosu pgpool touch /home/pgpool/.ssh/config; \
     echo -e "GSSAPIAuthentication yes\nGSSAPIDelegateCredentials yes\nGSSAPITrustDNS yes\nStrictHostKeyChecking no\nForwardAgent yes" >> /home/pgpool/.ssh/config
 
-COPY bin/start-pgpool2.py /usr/bin/start-pgpool2
-#COPY bin/source_env.sh /usr/bin/source_env
-COPY bin/follow_master.sh /usr/bin/follow_master
-COPY bin/failover.sh /usr/bin/failover
+COPY bin/* /usr/local/bin/
 COPY conf/* /usr/local/etc/
 #COPY id_rsa /root/.ssh/
 COPY pcppass /home/pgpool/.pcppass
 
-RUN chown pgpool:pgpool /bin/start-pgpool2 /usr/bin/follow_master /usr/bin/failover /home/pgpool/.pcppass; \
+#RUN chown pgpool:pgpool /usr/local/bin/start-pgpool2 /usr/local/bin/follow_master /usr/bin/failover /usr/local/bin/failback /home/pgpool/.pcppass;
+RUN chown -R pgpool:pgpool /usr/local/bin; \
     chown -R pgpool:pgpool /usr/local/etc; \
-    chmod u+x /usr/bin/start-pgpool2 /usr/bin/failover /usr/bin/follow_master; \
+    chown pgpool:pgpool /home/pgpool/.pcppass; \
+    #chmod u+x /usr/bin/start-pgpool2 /usr/bin/failover /usr/bin/follow_master /usr/bin/failback; \
+    chmod u+x /usr/local/bin/*; \
     chmod 600 /home/pgpool/.pcppass; \
     echo "root:Docker" | chpasswd; \
     echo "pgpool:pgpDocker" | chpasswd; \
