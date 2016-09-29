@@ -377,7 +377,7 @@ delay_threshold = 420
 
 # - Special commands -
 
-follow_master_command = '/usr/bin/follow_master %d %h %p %D %m %H %r %R %M %P'
+follow_master_command = '/usr/local/bin/follow_master %d %h %p %D %m %H %r %R %M %P'
                                    # Executes this command after master failover
                                    # Special values:
                                    #   %d = node id
@@ -424,7 +424,7 @@ connect_timeout = 10000
 # FAILOVER AND FAILBACK
 #------------------------------------------------------------------------------
 
-failover_command = '/usr/bin/failover %d %h %p %D %m %H %r %R %M %P failover'
+failover_command = '/usr/local/bin/failover %d %h %p %D %m %H %r %R %M %P failover'
                                    # Executes this command at failover
                                    # Special values:
                                    #   %d = node id
@@ -438,7 +438,7 @@ failover_command = '/usr/bin/failover %d %h %p %D %m %H %r %R %M %P failover'
                                    #   %r = new master port number
                                    #   %R = new master database cluster path
                                    #   %% = '%' character
-failback_command = ''
+failback_command = '/usr/local/bin/failback %d %h %p %D %m %H %r %R %M %P'
                                    # Executes this command at failback.
                                    # Special values:
                                    #   %d = node id
