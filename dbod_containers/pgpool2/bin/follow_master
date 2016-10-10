@@ -16,9 +16,10 @@ MODE=m2s
 #PG_CTL=/usr/pgsql-$PG_VERSION_MAJOR/bin/pg_ctl
 PG_CTL=/usr/local/pgsql/pgsql-$PG_VERSION/bin/pg_ctl
 
-LOG=/var/log/pgpool/failover-recovery.log
-FAILED_USER=dbod
-NEW_MASTER_USER=dbod
+TIMESTAMP=`date +'%s'`
+LOG=/var/log/pgpool/pgpool-operations.log
+FAILED_USER=postgres
+NEW_MASTER_USER=postgres
 
 echo -e "$(date) - $(basename $0)\n \
     failed node: id $FAILED_NODE -> $FAILED_HOSTNAME:$FAILED_PORT @ $FAILED_DB_CLUSTER \n \
@@ -27,6 +28,10 @@ echo -e "$(date) - $(basename $0)\n \
     old primary: id $OLD_PRIMARY \n" \
     >> $LOG
 
+if [ -z $FAILED_NODE ] || [ -z $FAILED_HOSTNAME ] || [ -z $FAILED_PORT ] || [ -z $FAILED_DB_CLUSTER ] || [ -z $NEW_MASTER ] || [ -z $NEW_MASTER_HOSTNAME ] || [ -z $NEW_MASTER_PORT ] || [ -z $NEW_MASTER_DB_CLUSTER ] || [ -z $OLD_MASTER ] || [ -z $OLD_PRIMARY ]; then
+    echo -e "One or more of the $(basename $0) script are not set. Check $LOG. Exiting..." >> $LOG
+    exit 0;
+fi
 #pg_ctl = /usr/local/pgsql/pgsql-$PG_SERVER_VERSION/bin/pg_ctl
 
 if [ -f $HOME/environment.sh ]; then
@@ -37,28 +42,28 @@ else
 fi
 
 echo "Number of hosts in the cluster: $HOSTS_NO" >> $LOG
-echo "Recovery of the host which are not running \n" >> $LOG
+echo -e "Recovery of the host which are not running \n" >> $LOG
 
 #if ssh -T dbod@$HOST$i sudo -u postgres $PG_CTL -D $FAILED_DB_CLUSTER status|grep "is running" >/dev/null 2>&1 
-if ssh -t $FAILED_USER@$FAILED_HOSTNAME "sudo -i -u postgres $PG_CTL -D $FAILED_DB_CLUSTER status|grep 'is running'" >> $LOG 2>&1
+if ssh -t $FAILED_USER@$FAILED_HOSTNAME "$PG_CTL -D $FAILED_DB_CLUSTER status|grep 'is running'" >> $LOG 2>&1
     then
         echo "Database @ $FAILED_HOSTNAME is still running" >> $LOG
-        ssh -t $FAILED_USER@$FAILED_HOSTNAME "sudo -i -u postgres $PG_CTL -w -m f -D $FAILED_DB_CLUSTER stop" >> $LOG 2>&1
+        ssh -t $FAILED_USER@$FAILED_HOSTNAME "$PG_CTL -w -m f -D $FAILED_DB_CLUSTER stop" >> $LOG 2>&1
         sleep 10
         # recovery of the node
-        /usr/local/bun/pcp_recovery_node -n $FAILED_NODE -h $HOSTNAME -p $PCP_PORT -U $PCP_USER >> $LOG 2>&1 
+        /usr/local/bin/pcp_recovery_node -n $FAILED_NODE -h $HOSTNAME -p $PCP_PORT -U $PCP_USER >> $LOG 2>&1 
     else
         echo "WARNING - $FAILED_HOSTNAME is not running. skipping follow master command." >> $LOG
 
         if [ $MODE = m2s ]; then
             echo "INFO - m2s mode setting the instance as a slave" >> $LOG
             echo "INFO - Modifying the conf files of the slave which has been promoted\n" >> $LOG
-            ssh -t $NEW_MASTER_USER@$NEW_MASTER_HOSTNAME "sudo -iu postgres sed -i 's/hot_standby = on/\#hot_standby = on/' $NEW_MASTER_DB_CLUSTER/postgresql.conf; \
-                sudo -iu postgres /bin/cp -f $NEW_MASTER_DB_CLUSTER/recovery.done $NEW_MASTER_DB_CLUSTER/old.recovery.conf; \
-                sudo -iu postgres /bin/rm -f $NEW_MASTER_DB_CLUSTER/recovery.done; \
-                sudo -iu postgres $PG_CTL -D $NEW_MASTER_DB_CLUSTER reload" \
-                >> $LOG
+            ssh -t $NEW_MASTER_USER@$NEW_MASTER_HOSTNAME "sed -i 's/hot_standby = on/\#hot_standby = on/' $NEW_MASTER_DB_CLUSTER/postgresql.conf; \
+                mv $NEW_MASTER_DB_CLUSTER/recovery.done $NEW_MASTER_DB_CLUSTER/recovery-$TIMESTAMP.done; \
+                $PG_CTL -D $NEW_MASTER_DB_CLUSTER reload" \
+                >> $LOG 2>&1
         fi
     fi
+echo
 exit 0;
 
