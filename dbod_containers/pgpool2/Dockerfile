@@ -120,8 +120,9 @@ RUN chown -R pgpool:pgpool /usr/local/bin; \
     #chmod u+x /usr/bin/start-pgpool2 /usr/bin/failover /usr/bin/follow_master /usr/bin/failback; \
     chmod u+x /usr/local/bin/*; \
     chmod 600 /home/pgpool/.pcppass; \
+    #echo 'pgpool:x:990:990::/home/pgpool:/bin/bash' >> /etc/passwd; \
     echo "root:Docker" | chpasswd; \
-    echo "pgpool:pgpDocker" | chpasswd; \
+    #echo "pgpool:pgpDocker" | chpasswd; \
     ln -sf /usr/bin/start-pgpool2 /start-pgpool2; \
     ldconfig
 
