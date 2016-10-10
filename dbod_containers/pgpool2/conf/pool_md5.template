@@ -1,1 +1,2 @@
-{{ pool_user }}:{{ pool_user_password }}
+{{ pool_user }}:{{ pool_password }}
+{{ recovery_user }}:{{ recovery_password_md5 }}
