@@ -30,7 +30,7 @@ listen_addresses = '*'
                                    # '*' for all, '' for no TCP/IP connections
                                    # (change requires restart)
 #port = 9999
-port = {{ pgpool_port }}
+port = {{ pool_port }}
                                    # Port number
                                    # (change requires restart)
 #socket_dir = '/tmp'
@@ -88,7 +88,7 @@ pcp_socket_dir = '/var/run/pgpool'
 backend_hostname{{ tokens[0] }} = '{{ tokens[1] }}'
 {# set pgdata = '/ORA/dbs03/' + tokens[1].split('-')[1].split('.')[0].upper() + '/data' #}
 {% if tokens|length == 4 %}
-    backend_data_directory{{ tokens[0] }} = '{{ tokens[3] }}'
+backend_data_directory{{ tokens[0] }} = '{{ tokens[3] }}'
 {% endif %}
 backend_port{{ tokens[0] }} = {{ tokens[2] }}
 backend_weight{{ tokens[0] }} = 1
@@ -112,13 +112,13 @@ authentication_timeout = 60
 ssl = true
                                    # Enable SSL support
                                    # (change requires restart)
-ssl_key = '/etc/ssl/key.pem'
+ssl_key = '/etc/ssl/private/key.pem'
                                    # Path to the SSL private key file
                                    # (change requires restart)
-ssl_cert = '/etc/ssl/mycert.pem'
+ssl_cert = '/etc/ssl/private/mycert.pem'
                                    # Path to the SSL public certificate file
                                    # (change requires restart)
-ssl_ca_cert = '/etc/ssl/ca.pem'
+ssl_ca_cert = '/etc/ssl/private/ca.pem'
                                    # Path to a single PEM format file
                                    # containing CA root certificate(s)
                                    # (change requires restart)
@@ -126,14 +126,13 @@ ssl_ca_cert = '/etc/ssl/ca.pem'
                                    # Directory containing CA root certificate(s)
                                    # (change requires restart)
 
-
 #------------------------------------------------------------------------------
 # POOLS
 #------------------------------------------------------------------------------
 
 # - Pool size -
 
-num_init_children = 1
+num_init_children = 32
                                    # Number of pools
                                    # (change requires restart)
 max_pool = 4
@@ -471,7 +470,7 @@ search_primary_node_timeout = 10
 
 recovery_user = '{{ recovery_user }}'
                                    # Online recovery user
-recovery_password = '{{ recovery_user_password }}'
+recovery_password = '{{ recovery_password }}'
                                    # Online recovery password
 recovery_1st_stage_command = 'recovery_1st_stage.sh'
                                    # Executes a command in first stage
