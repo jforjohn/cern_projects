@@ -23,8 +23,8 @@ OLD_PRIMARY=${10}         # %P
 PG_CTL=/usr/pgsql-PG_VERSION_MAJOR/bin/pg_ctl
 TRIGGER_FILE=${11}
 
-LOG=/var/log/pgpool/failover-recovery.log
-NEW_MASTER_USER=dbod
+LOG=/var/log/pgpool/pgpool-operations.log
+NEW_MASTER_USER=postgres
 
 echo -e "$(date) - $(basename $0)\n \
     failed node: id $FAILED_NODE -> $FAILED_HOSTNAME:$FAILED_PORT @ $FAILED_DB_CLUSTER \n \
@@ -34,23 +34,28 @@ echo -e "$(date) - $(basename $0)\n \
     trigger file: $TRIGGER_FILE \n" \
     >> $LOG
 
+if [ -z $FAILED_NODE ] || [ -z $FAILED_HOSTNAME ] || [ -z $FAILED_PORT ] || [ -z $FAILED_DB_CLUSTER ] || [ -z $NEW_MASTER ] || [ -z $NEW_MASTER_HOSTNAME ] || [ -z $NEW_MASTER_PORT ] || [ -z $NEW_MASTER_DB_CLUSTER ] || [ -z $OLD_MASTER ] || [ -z $OLD_PRIMARY ] || [ -z $TRIGGER_FILE ]; then
+    echo -e "One or more of the $(basename $0) script are not set. Check $LOG. Exiting..." >> $LOG
+    exit 0;
+fi
+
 if [ -f $HOME/environment.sh ]; then
-    echo "INFO - exporting environment variables \n" >> $LOG
+    echo -e "INFO - exporting environment variables \n" >> $LOG
     source $HOME/environment.sh
 else
-    echo "WARNING - Environment variables not set \n" >> $LOG
+    echo -e "WARNING - Environment variables not set \n" >> $LOG
 fi
 
 # Do nothing if standby goes down.
-if [[ $NEW_MASTER = $OLD_MASTER ]] || [[ $NEW_MASTER = $OLD_PRIMARY ]]; then
-    echo "WARNING - Failed node is a slave. Restart it and attach it to Pgpool" >> $LOG
-    exit 0;
-elif [[ $FAILED_NODE = $OLD_MASTER ]] || [[ $NEW_MASTER != $OLD_PRIMARY ]]; then
+if [[ $FAILED_NODE = $OLD_MASTER ]] || [[ $NEW_MASTER != $OLD_PRIMARY ]]; then
     echo "WARNING - Master failover" >> $LOG
     echo "WARNING - Create the trigger file \n" >> $LOG
     #$PG_CTL -h $NEW_MASTER_HOSTNAME -p $NEW_MASTER_PORT -D $NEW_MASTER_DB_CLUSTER -w promote >> $log
-    /usr/bin/ssh -t $NEW_MASTER_USER@$NEW_MASTER_HOSTNAME "sudo -iu postgres /bin/touch $NEW_MASTER_DB_CLUSTER/$TRIGGER_FILE" >> $LOG
+    /usr/bin/ssh -t $NEW_MASTER_USER@$NEW_MASTER_HOSTNAME "/bin/touch $NEW_MASTER_DB_CLUSTER/$TRIGGER_FILE" >> $LOG 2>&1
     #/usr/bin/docker exec $NEW_MASTER /bin/touch $PGDATA/$TRIGGER_FILE
+elif [[ $NEW_MASTER = $OLD_MASTER ]] || [[ $NEW_MASTER = $OLD_PRIMARY ]]; then
+    echo -e "WARNING - Failed node is a slave. Restart it and attach it to Pgpool. \n \
+        Or the the slave is already a master." >> $LOG
 else
     echo "ERROR - Waas!? Something weird happened... \n" >> $LOG
 fi
