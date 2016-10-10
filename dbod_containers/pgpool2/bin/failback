@@ -17,12 +17,14 @@ MODE=m2s
 
 #PG_CTL=/usr/pgsql-$PG_VERSION_MAJOR/bin/pg_ctl
 PG_CTL=/usr/local/pgsql/pgsql-$PG_VERSION/bin/pg_ctl
-PG_BASEBACKUP=/usr/local/pgsql/pgsql-$PG_VERSION_MAJOR/bin/pg_basebackup
+PG_BASEBACKUP=/usr/local/pgsql/pgsql-$PG_VERSION/bin/pg_basebackup
 
-LOG=/var/log/pgpool/failover-recovery.log
-ATTACHED_USER=dbod
-NEW_MASTER_USER=dbod
-BACKUP_FILE=pgdata2.bak
+LOG=/var/log/pgpool/pgpool-operations.log
+ATTACHED_USER=postgres
+#NEW_MASTER_USER=postgres
+TIMESTAMP=`date +'%s'`
+BACKUP_FILE=pgdata1-$TIMESTAMP.bak
+OLD_DATA_DIR=data-$TIMESTAMP
 MASTER_USER_REPL=pgrepl
 
 
@@ -33,26 +35,47 @@ echo -e "$(date) - $(basename $0)\n \
     old primary: id $OLD_PRIMARY \n" \
     >> $LOG
 
+if [ -z $ATTACHED_NODE ] || [ -z $ATTACHED_HOSTNAME ] || [ -z $ATTACHED_PORT ] || [ -z $ATTACHED_DB_CLUSTER ] || [ -z $NEW_MASTER ] || [ -z $NEW_MASTER_HOSTNAME ] || [ -z $NEW_MASTER_PORT ] || [ -z $NEW_MASTER_DB_CLUSTER ] || [ -z $OLD_MASTER ] || [ -z $OLD_PRIMARY ]; then
+    echo -e "One or more of the $(basename $0) script are not set. Check $LOG. Exiting..." >> $LOG
+    exit 0;
+fi
+
+if ssh -t $ATTACHED_USER@$ATTACHED_HOSTNAME stat $ATTACHED_DB_CLUSTER/m2s; then
+    echo -e "INFO - Recovery has finished, no need to attach $ATTACHED_HOSTNAME" >> $LOG
+    mv $ATTACHED_DB_CLUSTER/m2s $ATTACHED_DB_CLUSTER/m2s-$TIMESTAMP >> $LOG 2>&1
+    exit 0;
+elif [ $ATTACHED_NODE = $NEW_MASTER ]
+    echo "WARNING - Failback it's not possible. When you want to attach the defined master ($NEW_MASTER_HOSTNAME) \
+        prefer to recover it with 'pcp_recovery_node'" >> $LOG
+    exit 0;
+fi
+
+
 #pg_ctl = /usr/local/pgsql/pgsql-$PG_SERVER_VERSION/bin/pg_ctl
 
-if [ -f $HOME/environment.sh ]; ATTACHED_NODE
-    echo "INFO - Exporting environment variables \n" >> $LOG
+if [ -f $HOME/environment.sh ]; then
+    echo -e "INFO - exporting environment variables \n" >> $LOG
     source $HOME/environment.sh
 else
-    echo "WARNING - Environment variables not set \n" >> $LOG
+    echo -e "WARNING - Environment variables not set \n" >> $LOG
+fi
 
-ssh -t $ATTACHED_USER@$ATTACHED_HOSTNAME "sudo -iu postgres $PG_BASEBACKUP -D $ATTACHED_DB_CLUSTER -F t -z -x -v -P -U $MASTER_USER_REPL -p $NEW_MASTER_PORT -h $NEW_MASTER_HOSTNAME
-    sudo -iu postgres cp -rf $ATTACHED_DB_CLUSTER/data/* $ATTACHED_DB_CLUSTER/data.old; \
-    sudo -iu postgres rm -rf $HOST_TO_RECOVER_DB_CLUSTER/data/*; \
-    sudo -iu postgres tar xzfp $BACKUP_FILE/base.tar.gz -C $ATTACHED_DB_CLUSTER/data; \
-    sudo -iu postgres rm -rf $BACKUP_FILE; \
-    sudo -iu postgres rm -rf $ATTACHED_ARCHIVE/pg_xlog; \
-    sudo -iu postgres mv $ATTACHED_DB_CLUSTER/pg_xlog $ATTACHED_ARCHIVE/pg_xlog; \
-    sudo -iu postgres ln -s $ATTACHED_ARCHIVE/pg_xlog $ATTACHED_DB_CLUSTER/pg_xlog; \
-    sudo -i -u postgres /bin/cp -f $ATTACHED_DB_CLUSTER/../repl_files/* $ATTACHED_DB_CLUSTER; \
-    sudo -iu postgres $PG_CTL -D $ATTACHED_DB_CLUSTER restart" \
-    >> $LOG
-
-echo "INFO - Attaching $ATTACHED_HOSTNAME finished"
+ssh -t $ATTACHED_USER@$ATTACHED_HOSTNAME "$PG_BASEBACKUP -D $ATTACHED_DB_CLUSTER/../$BACKUP_FILE -F t -z -x -v -P -U $MASTER_USER_REPL -p $NEW_MASTER_PORT -h $NEW_MASTER_HOSTNAME; \
+    mv $ATTACHED_DB_CLUSTER $ATTACHED_DB_CLUSTER/../$OLD_DATA_DIR; \
+    mkdir -p $ATTACHED_DB_CLUSTER; \
+    chmod 700 $ATTACHED_DB_CLUSTER; \
+    tar xzfp $ATTACHED_DB_CLUSTER/../$BACKUP_FILE/base.tar.gz -C $ATTACHED_DB_CLUSTER/; \
+    mv $ATTACHED_ARCHIVE/pg_xlog $ATTACHED_ARCHIVE/pg_xlog-$TIMESTAMP; \
+    mv $ATTACHED_DB_CLUSTER/pg_xlog $ATTACHED_ARCHIVE/pg_xlog; \
+    ln -s $ATTACHED_ARCHIVE/pg_xlog $ATTACHED_DB_CLUSTER/pg_xlog; \
+    mv $ATTACHED_DB_CLUSTER/recovery.done $ATTACHED_DB_CLUSTER/recovery.done-$TIMESTAMP 2> /dev/null; \
+    mv $ATTACHED_DB_CLUSTER/recovery.log $ATTACHED_DB_CLUSTER/recovery-$TIMESTAMP.log 2> /dev/null; \
+    touch $ATTACHED_DB_CLUSTER/recovery.log; \
+    /bin/cp -f $ATTACHED_DB_CLUSTER/../repl_files/{pg_hba.conf,postgresql.conf,recovery.conf} $ATTACHED_DB_CLUSTER; \
+    $PG_CTL -w -l $ATTACHED_DB_CLUSTER/postgresql.log -D $ATTACHED_DB_CLUSTER start" \ 
+    >> $LOG 2>&1
+#/bin/cp -rf $ATTACHED_DB_CLUSTER/* $ATTACHED_DB_CLUSTER/../data.old; 
+#rm -r $ATTACHED_DB_CLUSTER; 
+echo -e "INFO - Attaching $ATTACHED_HOSTNAME finished \n" >> $LOG
 
 exit 0;
