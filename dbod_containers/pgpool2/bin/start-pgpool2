@@ -8,75 +8,149 @@ import os
 import signal
 import sys
 
+sys.path.insert(0,'/secrets')
+from userpass import userpassDict
+
 def pgpool_get_configuration():
     configuration = { }
+
     # Get the port pcp should listen on.
-    value = os.getenv('PCP_PORT', 9898)
+    if os.getenv('PCP_PORT'):
+        value = os.getenv('PCP_PORT')
+    else:
+        value = userpassDict.get('pcp_port', 9898)
     configuration.update({ 'pcp_port': value })
 
     # Get the PCP user.
-    value = os.getenv('PCP_USER', 'pcpuser')
+    if os.getenv('PCP_USER'):
+        value = os.getenv('PCP_USER')
+    else:
+        value = userpassDict.get('pcp_user', 'pcpuser')
     configuration.update({ 'pcp_user': value })
     
     # Get the PCP user password.
-    value = os.getenv('PCP_USER_PASSWORD', 'mypass')
+    if os.getenv('PCP_PASSWORD'):
+        value = os.getenv('PCP_PASSWORD')
+    else:
+        value = userpassDict.get('pcp_password', 'mypass')
     hashpass = hashlib.md5(value)
-    configuration.update({ 'pcp_user_password': hashpass.hexdigest() })
+    configuration.update({ 'pcp_password': hashpass.hexdigest() })
+
+    # Get the port pgpool should listen on
+    if os.getenv('POOL_PORT'):
+        value = os.getenv('POOL_PORT')
+    else:
+        value = userpassDict.get('pool_port', 5432)
+    configuration.update({ 'pool_port': value })
+
+    # Get the pgpool user which corresponds to the one in Postgres
+    if os.getenv('POOL_USER'):
+        value = os.getenv('POOL_USER')
+    else:
+        value = userpassDict.get('pool_user','admin')
+    configuration.update({ 'pool_user': value })
+    
+    # Get the pgpool user password which corresponds to the one in Postgres
+    if os.getenv('POOL_PASSWORD'):
+        value = os.getenv('POOL_PASSWORD')
+    else:
+        value = userpassDict.get('pool_password','dbod-postgres-test')
+    hashpass = hashlib.md5(value + configuration.get('pool_user'))
+    configuration.update({ 'pool_password': 'md5' + hashpass.hexdigest() })
 
     # Get the Recovery user
-    value = os.getenv('RECOVERY_USER', 'duper')
+    if os.getenv('RECOVERY_USER'):
+        value = os.getenv('RECOVERY_USER')
+    else:
+        value = userpassDict.get('recovery_user', 'duper')
     configuration.update({ 'recovery_user': value })
-    recovery_user = value
 
     # Get the Recovery user's password
-    value = os.getenv('RECOVERY_USER_PASSWORD', 'superduper')
-    hashpass = hashlib.md5(value + recovery_user)
-    configuration.update({ 'recovery_user_password': value })
-    #configuration.update({ 'recovery_user_password_md5': 'md5' + hashpass.hexdigest() })
+    if os.getenv('RECOVERY_PASSWORD'):
+        value = os.getenv('RECOVERY_PASSWORD')
+    else:
+        value = userpassDict.get('recovery_password', 'superduper')
+    hashpass = hashlib.md5(value + configuration.get('recovery_user'))
+    configuration.update({ 'recovery_password': value })
+    configuration.update({ 'recovery_password_md5': 'md5' + hashpass.hexdigest() })
 
     # Get the Streming Replication (sr) check user
-    value = os.getenv('SR_CHECK_USER', 'checker')
+    if os.getenv('SR_CHECK_USER'):
+        value = os.getenv('SR_CHECK_USER')
+    else:
+        value = userpassDict.get('sr_check_user', 'checker')
     configuration.update({ 'sr_check_user': value })
 
     # Get the Streming Replication (sr) check password
-    value = os.getenv('SR_CHECK_PASSWORD', 'test')
+    if os.getenv('SR_CHECK_PASSWORD'):
+        value = os.getenv('SR_CHECK_PASSWORD')
+    else: 
+        value = userpassDict.get('sr_check_password', 'test')
     configuration.update({ 'sr_check_password': value }) 
 
     # Get the Streming Replication (sr) check database
-    value = os.getenv('SR_CHECK_DATABASE', 'checker')
+    if os.getenv('SR_CHECK_DATABASE'):
+        value = os.getenv('SR_CHECK_DATABASE')
+    else:
+        value = userpassDict.get('sr_check_database', 'checker')
     configuration.update({ 'sr_check_database': value })
 
     # Get the health check user
-    value = os.getenv('HEALTH_CHECK_USER', 'checker')
+    if os.getenv('HEALTH_CHECK_USER'):
+        value = os.getenv('HEALTH_CHECK_USER')
+    else:
+        value = userpassDict.get('health_check_user', 'checker')
     configuration.update({ 'health_check_user': value })
 
     # Get the health check password
-    value = os.getenv('HEALTH_CHECK_PASSWORD', 'test')
+    if os.getenv('HEALTH_CHECK_PASSWORD'):
+        value = os.getenv('HEALTH_CHECK_PASSWORD')
+    else: 
+        value = userpassDict.get('health_check_password', 'test')
     configuration.update({ 'health_check_password': value })  
 
     # Get the health check database
-    value = os.getenv('HEALTH_CHECK_DATABASE', 'checker')
+    if os.getenv('HEALTH_CHECK_DATABASE'):
+        value = os.getenv('HEALTH_CHECK_DATABASE')
+    else: 
+        value = userpassDict.get('health_check_database', 'checker')
     configuration.update({ 'health_check_database': value })
-    
-    # Get the pgpool user which corresponds to the one in Postgres
-    value = os.getenv('POOL_USER','admin')
-    configuration.update({ 'pool_user': value })
-    pool_user = value
-    
-    # Get the pgpool user password which corresponds to the one in Postgres
-    value = os.getenv('POOL_USER_PASSWORD','dbod-postgres-test')
-    hashpass = hashlib.md5(value + pool_user)
-    configuration.update({ 'pool_user_password': 'md5' + hashpass.hexdigest() })
-    
-    # Get the port pgpool should listen on.
-    value = os.getenv('PGPOOL_PORT', 5432)
-    configuration.update({ 'pgpool_port': value })
     
     # Get the configuration for the backends.
     # FORMAT - INDEX:HOST:PORT
-    value = os.getenv('PGPOOL_BACKENDS', '1:localhost:5432').split(',')
+    if os.getenv('PGPOOL_BACKENDS'):
+        value = os.getenv('PGPOOL_BACKENDS').split(',')
+    else:
+        value = userpassDict.get('pgpool_backends', '1:localhost:5432').split(',')
     configuration.update({ 'pgpool_backends': value })
-    
+
+    '''
+    pgpvars = ['pcp_port', 'pcp_user', 'pcp_password', 'pool_port', 'pool_user', 'pool_password', 'recovery_user', 'recovery_password', 'sr_check_user', 'sr_check_user_password', 'sr_check_database', 'health_check_user', 'health_check_password', 'health_check_database', 'pgpool_backends']
+
+    port = 5432
+    for pgpvar in pgpvars:
+        if os.getenv(pgpvar.upper()):
+            value = os.getenv(pgpvar.upper())
+        elif userpassDict.get(pgpvar):
+            value = userpassDict.get(pgpvar)
+        else:
+            if 'port' in pgpvar:
+                value = port
+                port += 1
+            elif 'pgpool_backends' == pgpvar:
+                value = '1:localhost:5432'
+            else:
+                value = pgpvar
+            print "INFO - %s not found. Default value will be used" %(pgpvar)
+        if 'pcp_password'== pgpvar:
+            hashpass = hashlib.md5(value)
+            value = hashpass.hexdigest()
+        elif 'pool_password' == pgpvar:
+            hashpass = hashlib.md5(value + configuration.get('pool_user'))
+            value = hashpass.hexdigest()
+
+        configuration.update({ pgpvar: value })
+    '''
     return configuration
 
 def run(app, *args):
@@ -94,9 +168,10 @@ def write(template, path):
     with open(path, "wb") as output:
             output.write(template)
 
-def set_env(configuration, hostsNo, host):
+def set_env(configuration, hostsNo, host, cern_specific):
     home = os.environ['HOME']
     fenv = open(home + '/environment.sh','w+')
+    fenv.write("export KRB5_CONFIG=%s\n" %(os.environ['KRB5_CONFIG']))
     #os.environ["PCP_PORT"] = str(configuration['pcp_port'])
     fenv.write("export PCP_PORT=%s\n" %(configuration['pcp_port']))
     #os.environ["PCP_USER"] = configuration['pcp_user']
@@ -104,7 +179,13 @@ def set_env(configuration, hostsNo, host):
     #os.environ["POOL_USER"] = configuration['pool_user']
     fenv.write("export POOL_USER=%s\n" %(configuration['pool_user']))
     #os.environ["PGPOOL_PORT"] = str(configuration['pgpool_port'])
-    fenv.write("export PGPOOL_PORT=%s\n" %(configuration['pgpool_port']))
+    fenv.write("export POOL_PORT=%s\n" %(configuration['pool_port']))
+    fenv.write("export RECOVERY_USER=%s\n" %(configuration['recovery_user']))
+    fenv.write("export SR_CHECK_USER=%s\n" %(configuration['sr_check_user']))
+    fenv.write("export SR_CHECK_DATABASE=%s\n" %(configuration['sr_check_database']))
+    fenv.write("export HEALTH_CHECK_USER=%s\n" %(configuration['health_check_user']))
+    fenv.write("export HEALTH_CHECK_DATABASE=%s\n" %(configuration['health_check_database']))
+    fenv.write("export CERN_SPECIFIC=%s\n" %(cern_specific))
     #os.environ["PGPOOL_BACKENDS"] = ','.join(configuration['pgpool_backends'])
     #fenv.write("export PGPOOL_BACKENDS=%s\n" %(str(configuration['pgpool_backends']).strip('[]')))
     if host:
@@ -133,11 +214,12 @@ def setting_env():
 if __name__ == "__main__":
     # Initialize Jinja2
     #setting_env()
-    if os.path.isfile('/etc/krb5.keytab'):
+    if os.path.isfile('/etc/kerberos/krb5.keytab'):
         print 'INFO - Initialize Kerberos session'
-        run('kinit', '-kt', '/etc/krb5.keytab', 'dbod')
+        os.environ['KRB5_CONFIG']='/etc/kerberos/krb5.conf'
+        run('kinit', '-kt', '/etc/kerberos/krb5.keytab', 'postgres')
     else:
-        print 'WARNING - No keytab file available, no failover possible'
+        print 'WARNING - No keytab file available, no failover possible without passwordless ssh'
     loader = FileSystemLoader('/usr/local/etc')
     templates = Environment(loader = loader)
     
@@ -147,6 +229,7 @@ if __name__ == "__main__":
     backends = configuration['pgpool_backends']
     hostsNo = 0 
     host = []
+    cern_specific = False
     for backend in backends:
         if len(backend.split(':')) < 3:
             print 'ERROR - The right format is: <ID>:<HOST>:PORT[:<DATADIR>]'
@@ -154,6 +237,7 @@ if __name__ == "__main__":
         print backend 
         try:
             host.append(backend.split(':')[1].split('-')[1].split('.')[0])
+            cern_specific = True
             print 'INFO - Cern specific host'
         except IndexError:
             host.append(backend.split(':')[1])
@@ -165,7 +249,7 @@ if __name__ == "__main__":
             #sys.exit(1)
         hostsNo += 1
 
-    set_env(configuration, hostsNo, host)
+    set_env(configuration, hostsNo, host, cern_specific)
 
     # Write PCP user credentials.
     pcp = templates.get_template('pcp.conf.template').render(configuration)
