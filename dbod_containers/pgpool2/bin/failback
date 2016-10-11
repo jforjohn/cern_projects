@@ -40,9 +40,9 @@ if [ -z $ATTACHED_NODE ] || [ -z $ATTACHED_HOSTNAME ] || [ -z $ATTACHED_PORT ] |
     exit 0;
 fi
 
-if ssh -t $ATTACHED_USER@$ATTACHED_HOSTNAME stat $ATTACHED_DB_CLUSTER/m2s; then
+if ssh -t $ATTACHED_USER@$ATTACHED_HOSTNAME stat $ATTACHED_DB_CLUSTER/$MODE; then
     echo -e "INFO - Recovery has finished, no need to attach $ATTACHED_HOSTNAME" >> $LOG
-    mv $ATTACHED_DB_CLUSTER/m2s $ATTACHED_DB_CLUSTER/m2s-$TIMESTAMP >> $LOG 2>&1
+    mv $ATTACHED_DB_CLUSTER/$MODE $ATTACHED_DB_CLUSTER/$MODE-$TIMESTAMP >> $LOG 2>&1
     exit 0;
 elif [ $ATTACHED_NODE = $NEW_MASTER ]; then
     echo "WARNING - Failback it's not possible."
