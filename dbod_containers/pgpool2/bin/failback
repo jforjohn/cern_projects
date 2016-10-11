@@ -44,8 +44,9 @@ if ssh -t $ATTACHED_USER@$ATTACHED_HOSTNAME stat $ATTACHED_DB_CLUSTER/m2s; then
     echo -e "INFO - Recovery has finished, no need to attach $ATTACHED_HOSTNAME" >> $LOG
     mv $ATTACHED_DB_CLUSTER/m2s $ATTACHED_DB_CLUSTER/m2s-$TIMESTAMP >> $LOG 2>&1
     exit 0;
-elif [ $ATTACHED_NODE = $NEW_MASTER ]
-    echo "WARNING - Failback it's not possible. When you want to attach the defined master ($NEW_MASTER_HOSTNAME) \
+elif [ $ATTACHED_NODE = $NEW_MASTER ]; then
+    echo "WARNING - Failback it's not possible."
+    echo -e "When you want to attach the defined master ($NEW_MASTER_HOSTNAME) \
         prefer to recover it with 'pcp_recovery_node'" >> $LOG
     exit 0;
 fi
