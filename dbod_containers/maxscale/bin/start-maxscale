@@ -1,0 +1,188 @@
+#!/usr/bin/python
+
+from jinja2 import Environment, FileSystemLoader
+from subprocess import check_call,check_output
+from json import load
+import os
+import signal
+import sys
+
+if os.path.isfile('/tmp/secrets/userpass.json'):
+    with open("/tmp/secrets/userpass.json") as fd:
+        userpassDict = load(fd)
+else:
+    userpassDict = {}
+    print "WARNING - No userpass file in /tmp/secrets directory"
+    print "INFO - Environment variables will be used instead"
+
+
+def maxscale_get_configuration():
+    configuration = { }
+
+    # Get the port Read_Only service should listen on.
+    if os.getenv('RO_PORT'):
+        value = os.getenv('RO_PORT')
+    else:
+        value = userpassDict.get('ro_port', 4008)
+    configuration.update({ 'ro_port': value })
+
+    # Get the Read_Only service user.
+    if os.getenv('RO_USER'):
+        value = os.getenv('RO_USER')
+    else:
+        value = userpassDict.get('ro_user', 'dod_mysql')
+    configuration.update({ 'ro_user': value })
+
+    # Get the Read_Only service password.
+    if os.getenv('RO_PASSWORD'):
+        value = os.getenv('RO_PASSWORD')
+    else:
+        value = userpassDict.get('ro_password', 'dod_mysql_password')
+    hashpass = check_output(['maxpasswd', '/var/lib/maxscale/', value])
+    configuration.update({ 'ro_password': hashpass[:-1] })
+
+
+    # Get the port Read_Write split service should listen on.
+    if os.getenv('RW_PORT'):
+        value = os.getenv('RW_PORT')
+    else:
+        value = userpassDict.get('rw_port', 4008)
+    configuration.update({ 'rw_port': value })
+
+    # Get the Read_Write split service user.
+    if os.getenv('RW_USER'):
+        value = os.getenv('RW_USER')
+    else:
+        value = userpassDict.get('rw_user', 'dod_mysql')
+    configuration.update({ 'rw_user': value })
+
+    # Get the Read_Write split service password.
+    if os.getenv('RW_PASSWORD'):
+        value = os.getenv('RW_PASSWORD')
+    else:
+        value = userpassDict.get('rw_password', 'dod_mysql_password')
+    hashpass = check_output(['maxpasswd', '/var/lib/maxscale/', value])
+    configuration.update({ 'rw_password': hashpass[:-1] })
+    
+    # Get the Monitor service user.
+    if os.getenv('MON_USER'):
+        value = os.getenv('MON_USER')
+    else:
+        value = userpassDict.get('mon_user', 'dod_mysql')
+    configuration.update({ 'mon_user': value })
+
+    # Get the Monitor service password.
+    if os.getenv('MON_PASSWORD'):
+        value = os.getenv('MON_PASSWORD')
+    else:
+        value = userpassDict.get('mon_password', 'dod_mysql_password')
+    hashpass = check_output(['maxpasswd', '/var/lib/maxscale/', value])
+    configuration.update({ 'mon_password': hashpass[:-1] })
+
+    # Get the failover user.
+    if os.getenv('FAILOVER_USER'):
+        value = os.getenv('FAILOVER_USER')
+    else:
+        value = userpassDict.get('failover_user', 'dod_mysql')
+    configuration.update({ 'failover_user': value })
+
+    # Get the failover user's password.
+    if os.getenv('FAILOVER_PASSWORD'):
+        value = os.getenv('FAILOVER_PASSWORD')
+    else:
+        value = userpassDict.get('failover_password', 'dod_mysql_password')
+    passwd = value
+    #hashpass = check_output(['maxpasswd', '/var/lib/maxscale/', value])
+    #configuration.update({ 'failover_password': hashpass[:-1] })
+    configuration.update({ 'failover_password_txt': passwd })
+
+    # Get the replication user.
+    if os.getenv('REPL_USER'):
+        value = os.getenv('REPL_USER')
+    else:
+        value = userpassDict.get('repl_user', 'dod_repl')
+    configuration.update({ 'repl_user': value })
+
+    # Get the replication user's password.
+    if os.getenv('REPL_PASSWORD'):
+        value = os.getenv('REPL_PASSWORD')
+    else:
+        value = userpassDict.get('repl_password', 'dod_repl_password')
+    passwd = value
+    #hashpass = check_output(['maxpasswd', '/var/lib/maxscale/', value])
+    #configuration.update({ 'failover_password': hashpass[:-1] })
+    configuration.update({ 'repl_password_txt': passwd })   
+
+    # Get the configuration for the backends.
+    # FORMAT - HOST:PORT
+    if os.getenv('MAXSCALE_BACKENDS'):
+        value = os.getenv('MAXSCALE_BACKENDS').split(',')
+    else:
+        value = userpassDict.get('maxscale_backends', 'localhost:3306').split(',')
+    configuration.update({ 'maxscale_backends': value })
+
+    return configuration
+
+
+def run(app, *args):
+    check_call([app] + list(args))
+
+def write(template, path):
+    with open(path, "wb") as output:
+            output.write(template)
+
+def set_env(configuration, hostsNo, host):
+    home = os.environ['HOME']
+    fenv = open(home + '/environment.sh', 'w+')
+    fenv.write("export RO_USER=%s\n" %(configuration['ro_user']))
+    fenv.write("export RO_PORT=%s\n" %(configuration['ro_port']))
+    fenv.write("export RO_PASSWORD=%s\n" %(configuration['ro_password']))
+    fenv.write("export RW_USER=%s\n" %(configuration['rw_user']))
+    fenv.write("export RW_PORT=%s\n" %(configuration['rw_port']))
+    fenv.write("export RW_PASSWORD=%s\n" %(configuration['rw_password']))
+    fenv.write("export MON_USER=%s\n" %(configuration['mon_user']))
+    fenv.write("export MON_PASSWORD=%s\n" %(configuration['mon_password']))
+    fenv.write("export FAILOVER_USER=%s\n" %(configuration['failover_user']))
+    fenv.write("export REPL_USER=%s\n" %(configuration['repl_user']))
+    
+    if host:
+        fenv.write("export HOSTS_NO=%s\n" %(hostsNo))
+        for num in range(hostsNo):
+            fenv.write("export HOST%s=%s\n" %(num,host[num].strip(':')[0]))
+            fenv.write("export HOST%s_PORT=%s\n" %(num,host[num].strip(':')[1]))
+    fenv.close()
+
+if __name__ == "__main__":
+    # Initialize Jinja2
+    loader = FileSystemLoader('/etc/maxscale.d')
+    templates = Environment(loader = loader, extensions=["jinja2.ext.do",])
+
+    # Create maxscale key to encrypt passwords
+    run('maxkeys', '/var/lib/maxscale/') 
+    # Load the configuration into a dictionary.
+    configuration = maxscale_get_configuration()
+
+    backends = configuration['maxscale_backends']
+    hostsNo = 0
+    host = []
+    for backend in backends:
+        print backend
+        if (len(backend.split(':')) < 2) or (':' not in backend):
+            print 'ERROR - The right format is: <HOST>:<PORT>'
+            print 'ERROR - No host related environment variables can be exported'
+            raise ValueError('Invalid Backend: %s' % backend)
+        
+        host.append(backend.strip())
+        hostsNo += 1
+
+    set_env(configuration, hostsNo, host)
+    
+    # Write Maxscale conf file
+    maxscale_conf = templates.get_template('maxscale.cnf.template').render(configuration)
+    write(maxscale_conf, '/etc/maxscale.cnf')
+    my_cnf = templates.get_template('my.cnf').render(configuration)
+    write(my_cnf, '%s/.my.cnf' %(os.environ['HOME']))
+    failover_file = templates.get_template('failover').render(configuration)
+    write(failover_file, '/etc/maxscale.d/failover')
+
+    run("/usr/bin/maxscale", "-d")
