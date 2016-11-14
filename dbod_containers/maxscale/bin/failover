@@ -1,0 +1,131 @@
+#!/usr/bin/python
+
+import logging
+from argparse import ArgumentParser
+from subprocess import check_call, check_output, CalledProcessError
+import json
+
+def NodedownHandler(rpl_user, user, masterlist, slavelist, elected, logFile):
+    if masterlist:
+        logger.warning("Server down but there is still a master(s)")
+        logger.info("Node down: %s, Active master(s): %s, Active slave(s): %s" %(str(initiator), str(masterlist), str(slavelist)))
+        logger.info("No actions need to be taken")
+
+    elif slavelist:
+        logger.warning("Master(s) is down")
+        slaves = ','.join([user + '@' + slave for slave in slavelist])
+        
+        failovercmd = "/usr/bin/mysqlrpladmin --rpl-user=%s --slaves=%s --candidates=%s --force --log=%s -vv failover" %(rpl_user, slaves, elected, logFile)
+        logger.debug("Failover command: " + failovercmd)
+        try:
+            check_call(failovercmd.split())
+        except CalledProcessError as e:
+            logger.error("Command %s failed with returned code: %s" %(e.cmd, e.returncode))
+
+        electedHost = elected.split(':')[0]
+        electedPort = elected.split(':')[1]
+        mysqlcmd = "mysql -h %s -P %s -u %s --password=%s -e 'SET GLOBAL read_only=OFF;'" %(elected, electedPort, user.split(':')[0], user.split(':')[1])
+        logger.debug("MySQL command: " + mysqlcmd)
+        try:
+            output = check_output(mysqlcmd.split(), universal_newlines=True)
+        except CalledProcessError as e:
+            logger.error("Command %s failed with returned code: %s" %(e.cmd, e.returncode))
+        logger.debug("Mysql command output:")
+        logger.debug(output)
+
+        if mysql_state['elected'] not in mysql_state['master']:
+            mysql_state['master'] = mysql_state['master'] + ',' + mysql_state['elected']
+        mysql_state['slave'] = ','.join(list( set(slavelist) - set([mysql_state['elected']]) ))
+
+    else:
+        logger.warning("All given instances are down: " + str(hostlist))
+
+def ElectMaster(user, mysql_state, slavelist, masterlist, logFile):
+    if slavelist:
+        if masterlist:
+            slaves = ','.join([user + '@' + slave for slave in slavelist])
+            masters = ','.join([user + '@' + master for master in masterlist])
+            electcmd = "/usr/bin/mysqlrpladmin --slaves=%s --master=%s --log=%s elect" %(slaves, masters, logFile)
+            logger.debug("Command for next Master election: " + electcmd)
+            try:
+                output = check_output(electcmd.split())
+            except CalledProcessError as e:
+                logger.error("Command %s failed with returned code: %s" %(e.cmd, e.returncode))
+            mysql_state['elected'] = output.split('Best slave found is located on ')[1].split('.\n')[0]
+
+        else:
+            if mysql_state['elected'] not in slavelist:
+                logger.warning("Previous elected master '%s' is not in the slaves' list anymore" %(mysql_state['elected']))
+                logger.info("Taking randomly the first slave from the slaves' list")
+                mysql_state['elected'] = slavelist[0]
+            else:
+                logger.info("Use the previous elected node")
+        logger.info("Node %s elected as next master" %(mysql_state['elected']))
+       
+if __name__ == "__main__":
+    logFile = "/var/log/maxscale/failover.log"
+    logging.basicConfig(filename='%s' %(logFile),
+                    format='%(asctime)s %(levelname)s:%(lineno)d: %(message)s', 
+                    datefmt='%m/%d/%Y %H:%M:%S',
+                    level=logging.DEBUG)
+    logger = logging.getLogger('failover')
+
+
+    parser = ArgumentParser()
+    parser.add_argument("--initiator", dest="initiator", 
+                help="will be replaced with the IP and port of the server who initiated the event")
+    parser.add_argument("--event", dest="event",
+                help="will be replaced with the name of the event")
+    parser.add_argument("--nodelist", dest="nodelist",
+                help="will be replaced with a list of server IPs and ports that are running")
+    parser.add_argument("--hostlist", dest="hostlist",
+                help="will be replaced with a list of server IPs and ports")
+    parser.add_argument("--masterlist", dest="masterlist",
+                help="will be replaced with a list of server IPs and ports that are masters")
+    parser.add_argument("--slavelist", dest="slavelist",
+                help="will be replaced with a list of server IPs and ports that are masters")
+    args = parser.parse_args()
+    logging.debug(args)
+
+    initiator = args.initiator
+    event = args.event
+    nodelist = filter(None, args.nodelist.split(','))
+    hostlist = filter(None, args.hostlist.split(','))
+    masterlist = filter(None, args.masterlist.split(','))
+    slavelist = filter(None, args.slavelist.split(','))
+
+    rpl_user = "{{ repl_user }}:{{ repl_password_txt }}"
+    user = "{{ failover_user }}:{{ failover_password_txt }}"
+    # Find remaining active nodes, if any
+    nodes_down = list(set(hostlist) - set(nodelist))
+
+    # MySQL state info json file
+    mysql_state__file_path = "/etc/maxscale.d"
+    try:
+        with open('%s/mysql_state.json' %(mysql_state__file_path), 'r') as fd:
+            mysql_state = json.load(fd)
+    except IOError:
+        logger.error("mysql_state file does not exist anymore in '%s' directory" %(mysql_state__file_path))
+    except ValueError:
+        logger.error("mysql_state file is not in json format")
+    if 'elected' not in mysql_state.keys() or 'master' not in mysql_state.keys() or 'slave' not in mysql_state.keys():
+        logger.error("Wrong key requested from mysql_state.json: " + key)
+        raise KeyError("Wrong key requested from mysql_state.json")
+
+
+    # Find next master
+    ElectMaster(user, mysql_state, slavelist, masterlist, logFile)
+    
+    mysql_state['master'] = ','.join(masterlist)
+    mysql_state['slave'] = ','.join(slavelist)
+
+    if 'down' in event:
+        logger.warning("Node down: %s with this event: %s" %(initiator, event))
+        if len(hostlist) == len(nodelist):
+            logger.warning("All given instances are down: " + str(hostlist))
+        elif len(nodes_down) > 1:
+            logger.warning("Many nodes are down: " + str(nodes_down)) 
+        NodedownHandler(rpl_user, user, masterlist, slavelist, mysql_state['elected'], logFile)
+        
+    with open('%s/mysql_state.json' %(mysql_state__file_path), 'w+') as fd:
+        fd.write(json.dumps(mysql_state))
