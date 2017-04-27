@@ -1,15 +1,15 @@
 {
 "ro_port": 4008,
-"ro_user": "dod_mysql",
+"ro_user": "super_mysql",
 "ro_password": "pass",
 "rw_port": 4006,
-"rw_user": "dod_mysql",
+"rw_user": "super_mysql",
 "rw_password": "pass",
-"mon_user": "dod_repl",
-"mon_password": "replpass",
+"mon_user": "monuser",
+"mon_password": "monpass",
 "maxscale_backends": "dbod-mym01.cern.ch:5500,dbod-mys01.cern.ch:5500",
-"failover_user": "dod_mysql",
+"failover_user": "super_mysql",
 "failover_password": "pass",
-"repl_user": "dod_repl",
+"repl_user": "repl",
 "repl_password": "replpass"
 }
