@@ -13,4 +13,5 @@ userpassDict = {
 'health_check_user': 'checker',
 'health_check_password': 'test',
 'health_check_database': 'checker',
+'pgpool_backends': '0:dbod-pgs01:6600:/ORA/dbs03/PGS01/data,1:dbod-pgm01:6600:/ORA/dbs03/PGM01/data'
 }
