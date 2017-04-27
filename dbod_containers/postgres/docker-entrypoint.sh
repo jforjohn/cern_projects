@@ -1,83 +1,130 @@
 #!/bin/bash
 set -e
 
+# usage: file_env VAR [DEFAULT]
+#    ie: file_env 'XYZ_DB_PASSWORD' 'example'
+# (will allow for "$XYZ_DB_PASSWORD_FILE" to fill in the value of
+#  "$XYZ_DB_PASSWORD" from a file, especially for Docker's secrets feature)
+file_env() {
+        local var="$1"
+        local fileVar="${var}_FILE"
+        local def="${2:-}"
+        if [ "${!var:-}" ] && [ "${!fileVar:-}" ]; then
+                echo >&2 "error: both $var and $fileVar are set (but are exclusive)"
+                exit 1
+        fi
+        local val="$def"
+        if [ "${!var:-}" ]; then
+                val="${!var}"
+        elif [ "${!fileVar:-}" ]; then
+                val="$(< "${!fileVar}")"
+        fi
+        export "$var"="$val"
+        unset "$fileVar"
+}
+
 if [ "${1:0:1}" = '-' ]; then
         set -- postgres "$@"
 fi
 
-echo "Paramaters: $@"
+# allow the container to be started with `--user`
+if [ "$1" = 'postgres' ] && [ "$(id -u)" = '0' ]; then
+        mkdir -p "$PGDATA"
+        chown -R postgres "$PGDATA"
+        chmod 700 "$PGDATA"
+
+        mkdir -p /var/run/postgresql
+        chown -R postgres /var/run/postgresql
+        chmod g+s /var/run/postgresql
+
+        # Create the transaction log directory before initdb is run (below) so the directory is owned by the correct user
+        if [ "$POSTGRES_INITDB_XLOGDIR" ]; then
+                mkdir -p "$POSTGRES_INITDB_XLOGDIR"
+                chown -R postgres "$POSTGRES_INITDB_XLOGDIR"
+                chmod 700 "$POSTGRES_INITDB_XLOGDIR"
+        fi
+
+        exec gosu postgres "$BASH_SOURCE" "$@"
+fi
 
 if [ "$1" = 'postgres' ]; then
-         
-        mkdir -p "$PGARCHIVE"
-        chmod 700 "$PGARCHIVE"
-        chown -R postgres "$PGARCHIVE"
-
-        mkdir -p "$PGCONF"
-        chmod 700 "$PGCONF"
-        chown -R postgres "$PGCONF"
-        #rm /usr/share/postgresql/postgresql.conf.sample
-        #rm /usr/share/postgresql/9.4/postgresql.conf.sample 
-        #cp $PGCONF/postgresql.conf /usr/share/postgresql/postgresql.conf.sample
-        #ln -sv /usr/share/postgresql/postgresql.conf.sample /usr/share/postgresql/$PG_MAJOR/
-        #chown -R postgres:postgres /usr/share/postgresql
-        #chown -R postgres:postgres /usr/share/postgresql/9.4
-        
-        
         mkdir -p "$PGDATA"
-        chmod 700 "$PGDATA"
-        chown -R postgres "$PGDATA"
+        chown -R "$(id -u)" "$PGDATA" 2>/dev/null || :
+        chmod 700 "$PGDATA" 2>/dev/null || :
 
-        chmod g+s /run/postgresql
-        chown -R postgres /run/postgresql
+        # Create the transaction log directory before initdb is run (below) so the directory is owned by the correct user
+        if [ "$POSTGRES_INITDB_XLOGDIR" ]; then
+                mkdir -p "$POSTGRES_INITDB_XLOGDIR"
+                chown -R postgres "$POSTGRES_INITDB_XLOGDIR"
+                chmod 700 "$POSTGRES_INITDB_XLOGDIR"
+        fi
 
+        POSTGRES_INITDB_ARGS="$POSTGRES_INITDB_ARGS --pgdata $PGDATA"
         # look specifically for PG_VERSION, as it is expected in the DB dir
         if [ ! -s "$PGDATA/PG_VERSION" ]; then
-                
-                eval "gosu postgres initdb $POSTGRES_INITDB_ARGS"
-                
+                file_env 'POSTGRES_INITDB_ARGS'
+                if [ "$POSTGRES_INITDB_XLOGDIR" ]; then
+                        export POSTGRES_INITDB_ARGS="$POSTGRES_INITDB_ARGS --xlogdir $POSTGRES_INITDB_XLOGDIR/pg_xlog"
+                fi
+
+                if [ "$POSTGRES_INITDB_XLOGDIR" ]; then
+                  mkdir -p "$POSTGRES_INITDB_XLOGDIR/archive"
+                  chown -R postgres "$POSTGRES_INITDB_XLOGDIR/archive"
+                  chmod 700 "$POSTGRES_INITDB_XLOGDIR/archive"
+                fi
+
+                echo "PGDATA: $PGDATA"
+                echo "PGXLOG: ${POSTGRES_INITDB_XLOGDIR:=$PGDATA/pg_xlog}"
+                echo "POSTGRES_INITDB_ARGS: $POSTGRES_INITDB_ARGS"
+                eval "initdb --username=postgres $POSTGRES_INITDB_ARGS"
+
+                # empty pg_hba.conf file in order to set more restrict access
+                /bin/cp /dev/null $PGDATA/pg_hba.conf
                 # check password first so we can output the warning before postgres
                 # messes it up
+                file_env 'POSTGRES_PASSWORD'
                 if [ "$POSTGRES_PASSWORD" ]; then
                         pass="PASSWORD '$POSTGRES_PASSWORD'"
                         authMethod=md5
                 else
                         # The - option suppresses leading tabs but *not* spaces. :)
-                        cat >&2 <<-'EOWARN'
-                                ****************************************************
-                                WARNING: No password has been set for the database.
-                                         This will allow anyone with access to the
-                                         Postgres port to access your database. In
-                                         Docker's default configuration, this is
-                                         effectively any other container on the same
-                                         system.
-                                         Use "-e POSTGRES_PASSWORD=password" to set
-                                         it in "docker run".
-                                ****************************************************
-EOWARN
+			cat >&2 <<-'EOWARN'
+				****************************************************
+				WARNING: No password has been set for the database.
+				         This will allow anyone with access to the
+				         Postgres port to access your database. In
+				         Docker's default configuration, this is
+				         effectively any other container on the same
+				         system.
+				         Use "-e POSTGRES_PASSWORD=password" to set
+				         it in "docker run".
+				****************************************************
+			EOWARN
 
                         pass=
-                        authMethod=trust
+                        authMethod=md5
+			authMethodLocal=trust
                 fi
 
-                { echo; echo "host all all 0.0.0.0/0 $authMethod"; } >> "$PGDATA/pg_hba.conf"
+                { echo; echo "local all postgres $authMethodLocal"; } | tee "$PGDATA/pg_hba.conf" > /dev/null
+		{ echo "host all postgres 0.0.0.0/0 $authMethod"; } | tee -a "$PGDATA/pg_hba.conf" > /dev/null
 
-                # internal start of server in order to allow set-up using psql-client           
+                # internal start of server in order to allow set-up using psql-client
                 # does not listen on external TCP/IP and waits until start finishes
-                gosu postgres pg_ctl -D "$PGDATA" \
+                PGUSER="${PGUSER:-postgres}" \
+                pg_ctl -D "$PGDATA" \
                         -o "-c listen_addresses='localhost'" \
                         -w start
 
-                : ${POSTGRES_USER:=postgres}
-                : ${POSTGRES_DB:=$POSTGRES_USER}
-                export POSTGRES_USER POSTGRES_DB
+                file_env 'POSTGRES_USER' 'postgres'
+                file_env 'POSTGRES_DB' "$POSTGRES_USER"
 
                 psql=( psql -v ON_ERROR_STOP=1 )
 
                 if [ "$POSTGRES_DB" != 'postgres' ]; then
-                        "${psql[@]}" --username postgres <<-EOSQL
-                                CREATE DATABASE "$POSTGRES_DB" ;
-EOSQL
+			"${psql[@]}" --username postgres <<-EOSQL
+				CREATE DATABASE "$POSTGRES_DB" ;
+			EOSQL
                         echo
                 fi
 
@@ -86,9 +133,9 @@ EOSQL
                 else
                         op='CREATE'
                 fi
-                "${psql[@]}" --username postgres <<-EOSQL
-                        $op USER "$POSTGRES_USER" WITH SUPERUSER $pass ;
-EOSQL
+		"${psql[@]}" --username postgres <<-EOSQL
+			$op USER "$POSTGRES_USER" WITH SUPERUSER $pass ;
+		EOSQL
                 echo
 
                 psql+=( --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" )
@@ -97,21 +144,25 @@ EOSQL
                 for f in /docker-entrypoint-initdb.d/*; do
                         case "$f" in
                                 *.sh)     echo "$0: running $f"; . "$f" ;;
-                                *.sql)    echo "$0: running $f"; "${psql[@]}" < "$f"; echo ;;
+                                *.sql)    echo "$0: running $f"; "${psql[@]}" -f "$f"; echo ;;
                                 *.sql.gz) echo "$0: running $f"; gunzip -c "$f" | "${psql[@]}"; echo ;;
                                 *)        echo "$0: ignoring $f" ;;
                         esac
                         echo
                 done
 
-                gosu postgres pg_ctl -D "$PGDATA" -m fast -w stop
+                PGUSER="${PGUSER:-postgres}" \
+                pg_ctl -D "$PGDATA" -m fast -w stop
 
                 echo
                 echo 'PostgreSQL init process complete; ready for start up.'
                 echo
         fi
+fi
 
-        exec gosu postgres "$@"
+if [ -f /etc/postgresql/postgresql.conf -a -d $PGDATA ]; then
+  echo "Custom configuration file"
+  ln -sf /etc/postgresql/postgresql.conf $PGDATA
 fi
 
 exec "$@"
