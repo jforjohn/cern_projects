@@ -31,7 +31,7 @@ RUN yum install -y python python-devel \
     #
 
 COPY conf/* /etc/maxscale.d/
-COPY userpass.py /tmp/secrets/
+#COPY userpass.py /tmp/secrets/
 COPY bin/* /usr/local/bin/
 RUN chmod u+x /usr/local/bin/* \
     && chmod 644 /etc/maxscale.d/* \
