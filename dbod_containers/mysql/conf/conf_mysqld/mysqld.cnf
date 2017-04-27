@@ -1,0 +1,74 @@
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
+
+#
+# The MySQL  Server configuration file.
+#
+# For explanations see
+# http://dev.mysql.com/doc/mysql/en/server-system-variables.html
+
+[mysqld]
+max_user_connections = 300
+max_heap_table_size = 32M
+#server-id = 1
+#general-log-file = /ORA/dbs03/MYS01/mysql/mysql.log
+max_connections = 1000
+performance_schema
+innodb_flush_method = O_DIRECT
+innodb-read-io-threads = 4
+innodb_flush_log_at_trx_commit = 1
+log-slave-updates
+binlog_format = MIXED
+#port = 5500
+#socket = /var/lib/mysql/mysql.sock.mys01.5500
+tmp_table_size = 32M
+innodb_io_capacity = 200
+sync_binlog = 1
+query_cache_size = 128M
+expire_logs_days = 32
+innodb_write_io_threads = 4
+slow_query_log = 1
+thread_cache_size = 50
+innodb_open_files = 500
+table_definition_cache = 1000
+table_open_cache = 1000
+key_buffer_size = 256M
+innodb_file_per_table
+log_output = FILE
+#datadir = /etc/mysql/data
+#log-bin = /etc/mysql/binlogs
+innodb_log_file_size = 16M
+innodb_buffer_pool_size = 1G
+max_binlog_size = 1073741824
+#slow_query_log_file = /etc/mysql/data/mysql/slow_queries.log
+max_allowed_packet=64M
+innodb_checksum_algorithm=innodb
+binlog_checksum=none
+query_cache_type=1
+#ssl-cert=/etc/dbod/hostcert.pem
+#ssl-ca=/etc/dbod/ca.pem
+#ssl-key=/etc/dbod/hostkey.pem
+#ssl-cipher=DHE-RSA-AES256-SHA:AES128-SHA
+#relay-log=/etc/mysql/binlogs/mysql/relay-binlog
+#relay-log-index=/etc/mysql/binlogs/mysql/relay-bin.index
+log_slave_updates=1
+relay-log-info-repository=TABLE
+master-info-repository=TABLE
+relay-log-recovery=1
+relay_log_purge=1
+max_relay_log_size=0
+#protection against crash
+sync_relay_log=1
+sync_relay_log_info=1
+sync_master_info=1
+innodb_support_xa=1
+gtid_mode=on
+enforce-gtid-consistency=true
+##log-error       = /var/log/mysql/error.log
+# By default we only accept connections from localhost
+#bind-address   = 127.0.0.1
+# Disabling symbolic-links is recommended to prevent assorted security risks
+#symbolic-links=0
