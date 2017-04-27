@@ -19,6 +19,7 @@ MODE=m2s
 PG_CTL=/usr/local/pgsql/pgsql-$PG_VERSION/bin/pg_ctl
 PG_BASEBACKUP=/usr/local/pgsql/pgsql-$PG_VERSION/bin/pg_basebackup
 
+KERBEROS_DIR=/etc/dbod/kerberos
 LOG=/var/log/pgpool/pgpool-operations.log
 ATTACHED_USER=postgres
 #NEW_MASTER_USER=postgres
@@ -61,6 +62,13 @@ else
     echo -e "WARNING - Environment variables not set \n" >> $LOG
 fi
 
+if [ -f $KERBEROS_DIR/krb5.conf ] && [ -f $KERBEROS_DIR/krb5.keytab ]; then
+    echo -e "INFO - initialize kerberos session \n"
+    KRB5_CONFIG=$KERBEROS_DIR/krb5.conf kinit -kt $KERBEROS_DIR/krb5.keytab postgres >> $LOG
+else
+    echo -e "WARNING - no kerberos conf and keytab file available. Failover cannot be executed" >> $LOG
+fi
+
 ssh -t $ATTACHED_USER@$ATTACHED_HOSTNAME "$PG_BASEBACKUP -D $ATTACHED_DB_CLUSTER/../$BACKUP_FILE -F t -z -x -v -P -U $MASTER_USER_REPL -p $NEW_MASTER_PORT -h $NEW_MASTER_HOSTNAME; \
     mv $ATTACHED_DB_CLUSTER $ATTACHED_DB_CLUSTER/../$OLD_DATA_DIR; \
     mkdir -p $ATTACHED_DB_CLUSTER; \
@@ -73,10 +81,10 @@ ssh -t $ATTACHED_USER@$ATTACHED_HOSTNAME "$PG_BASEBACKUP -D $ATTACHED_DB_CLUSTER
     mv $ATTACHED_DB_CLUSTER/recovery.log $ATTACHED_DB_CLUSTER/recovery-$TIMESTAMP.log 2> /dev/null; \
     touch $ATTACHED_DB_CLUSTER/recovery.log; \
     /bin/cp -f $ATTACHED_DB_CLUSTER/../repl_files/{pg_hba.conf,postgresql.conf,recovery.conf} $ATTACHED_DB_CLUSTER; \
-    $PG_CTL -w -l $ATTACHED_DB_CLUSTER/postgresql.log -D $ATTACHED_DB_CLUSTER start" \ 
+    $PG_CTL -w -l $ATTACHED_DB_CLUSTER/postgresql.log -D $ATTACHED_DB_CLUSTER start" \
     >> $LOG 2>&1
-#/bin/cp -rf $ATTACHED_DB_CLUSTER/* $ATTACHED_DB_CLUSTER/../data.old; 
-#rm -r $ATTACHED_DB_CLUSTER; 
+#/bin/cp -rf $ATTACHED_DB_CLUSTER/* $ATTACHED_DB_CLUSTER/../data.old;
+#rm -r $ATTACHED_DB_CLUSTER;
 echo -e "INFO - Attaching $ATTACHED_HOSTNAME finished \n" >> $LOG
 
 exit 0;

@@ -17,6 +17,7 @@ MODE=m2s
 PG_CTL=/usr/local/pgsql/pgsql-$PG_VERSION/bin/pg_ctl
 
 TIMESTAMP=`date +'%s'`
+KERBEROS_DIR=/etc/dbod/kerberos
 LOG=/var/log/pgpool/pgpool-operations.log
 FAILED_USER=postgres
 NEW_MASTER_USER=postgres
@@ -39,6 +40,13 @@ if [ -f $HOME/environment.sh ]; then
     source $HOME/environment.sh
 else
     echo "WARNING - Environment variables not set \n" >> $LOG
+fi
+
+if [ -f $KERBEROS_DIR/krb5.conf ] && [ -f $KERBEROS_DIR/krb5.keytab ]; then
+    echo -e "INFO - initialize kerberos session \n"
+    KRB5_CONFIG=$KERBEROS_DIR/krb5.conf kinit -kt $KERBEROS_DIR/krb5.keytab postgres >> $LOG
+else
+    echo -e "WARNING - no kerberos conf and keytab file available. Failover cannot be executed" >> $LOG
 fi
 
 echo "Number of hosts in the cluster: $HOSTS_NO" >> $LOG

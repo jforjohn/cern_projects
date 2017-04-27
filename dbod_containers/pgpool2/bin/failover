@@ -23,6 +23,7 @@ OLD_PRIMARY=${10}         # %P
 PG_CTL=/usr/pgsql-PG_VERSION_MAJOR/bin/pg_ctl
 TRIGGER_FILE=${11}
 
+KERBEROS_DIR=/etc/dbod/kerberos
 LOG=/var/log/pgpool/pgpool-operations.log
 NEW_MASTER_USER=postgres
 
@@ -46,6 +47,13 @@ else
     echo -e "WARNING - Environment variables not set \n" >> $LOG
 fi
 
+if [ -f $KERBEROS_DIR/krb5.conf ] && [ -f $KERBEROS_DIR/krb5.keytab ]; then
+    echo -e "INFO - initialize kerberos session \n"
+    KRB5_CONFIG=$KERBEROS_DIR/krb5.conf kinit -kt $KERBEROS_DIR/krb5.keytab postgres >> $LOG
+else
+    echo -e "WARNING - no kerberos conf and keytab file available. Failover cannot be executed" >> $LOG
+fi
+
 # Do nothing if standby goes down.
 if [[ $FAILED_NODE = $OLD_MASTER ]] || [[ $NEW_MASTER != $OLD_PRIMARY ]]; then
     echo "WARNING - Master failover" >> $LOG
@@ -60,3 +68,4 @@ else
     echo "ERROR - Waas!? Something weird happened... \n" >> $LOG
 fi
 exit 0;
+
